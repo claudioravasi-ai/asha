@@ -1,0 +1,26 @@
+{
+  "name": "ASHA — Unidad de Dolor Agudo y Crónico",
+  "short_name": "ASHA",
+  "description": "Historia clínica de dolor agudo y crónico, con mapa corporal, fenotipado mecanístico y seguimiento de efectividad.",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#eef0f4",
+  "theme_color": "#2d6a72",
+  "lang": "es-AR",
+  "icons": [
+    {
+      "src": "icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
