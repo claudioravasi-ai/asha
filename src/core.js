@@ -104,6 +104,24 @@ function emailValido(s) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(String(s || '').trim());
 }
 
+/* -------------------------------------------------------------------------
+   La version se arma sola al construir, con el formato AAAA.MM.DD.HHMM. Sirve
+   para saber de un vistazo si el dispositivo que se tiene delante esta viendo
+   la ultima version o quedo con una vieja en cache, que es la primera
+   pregunta cuando alguien dice "a mi no me aparece eso".
+   ------------------------------------------------------------------------- */
+function versionLegible() {
+  const v = String(window.ALGOS_BUILD || '');
+  const m = v.match(/^(\d{4})\.(\d{2})\.(\d{2})\.(\d{2})(\d{2})$/);
+  if (!m) return {version:v || '—', fecha:'', texto:v || 'sin versión'};
+  const [, a, mes, d, h, min] = m;
+  const meses = ['enero','febrero','marzo','abril','mayo','junio','julio',
+                 'agosto','septiembre','octubre','noviembre','diciembre'];
+  const fecha = Number(d) + ' de ' + meses[Number(mes) - 1] + ' de ' + a +
+                ', ' + h + ':' + min;
+  return {version:v, fecha, texto:'Versión ' + v + ' · actualizada el ' + fecha};
+}
+
 /* ---------------------------------------------------------------- estado */
 
 const ESTADO = {
@@ -216,8 +234,22 @@ function guardar(rama, id, dato) {
     .then(() => true)
     .catch(e => {
       console.error('No se pudo sincronizar:', e);
-      avisar('Se guardó en este dispositivo pero no en la nube. ' +
-             'Se reintentará al recuperar la conexión.', 'aviso');
+
+      /* El mensaje anterior decia siempre "se reintentara al recuperar la
+         conexion", y eso solo es cierto cuando el problema ES la conexion.
+         Si el servidor rechazo la escritura por permisos, no se va a
+         reintentar nunca: prometerlo hace que el medico siga trabajando
+         tranquilo mientras nada se guarda. Son dos situaciones distintas y
+         tienen dos salidas distintas. */
+      const permisos = e && (e.code === 'PERMISSION_DENIED' ||
+                             /permission/i.test(e.message || ''));
+      if (permisos) {
+        avisar('No se pudo guardar en el servidor. Es probable que tu sesión ' +
+               'haya vencido: salí y volvé a entrar.', 'error', 12000);
+      } else {
+        avisar('Sin conexión. Se guardó en esta computadora y se va a subir ' +
+               'solo cuando vuelva internet.', 'aviso');
+      }
       return false;
     });
 }
@@ -231,17 +263,41 @@ function borrar(rama, id) {
 
 /* --------------------------------------------------------------- avisos  */
 
+const MAX_AVISOS = 3;
+
 function avisar(texto, tipo, ms) {
   const cont = $('#avisos') || document.body;
+
+  /* Si el mismo aviso ya esta en pantalla, no se duplica: se le renueva el
+     tiempo. Cuando se corta internet en medio de una consulta, cada guardado
+     dispara el mismo mensaje y sin esto la pantalla queda tapada por veinte
+     copias de la misma frase. */
+  const iguales = $$('.aviso', cont).filter(n => n.dataset.txt === texto);
+  if (iguales.length) {
+    const n = iguales[iguales.length - 1];
+    clearTimeout(Number(n.dataset.reloj));
+    n.dataset.reloj = programarSalida(n, tipo, ms);
+    return;
+  }
+
+  /* Y nunca mas de tres a la vez: el mas viejo se va. */
+  const vivos = $$('.aviso', cont);
+  for (let i = 0; i <= vivos.length - MAX_AVISOS; i++) vivos[i].remove();
+
   const d = document.createElement('div');
+  d.dataset.txt = texto;
   d.className = 'aviso aviso-' + (tipo || 'info');
   d.innerHTML = esc(texto);
   cont.appendChild(d);
   requestAnimationFrame(() => d.classList.add('entra'));
+  d.dataset.reloj = programarSalida(d, tipo, ms);
+}
+
+function programarSalida(nodo, tipo, ms) {
   const vida = ms || (tipo === 'error' ? 9000 : 4500);
-  setTimeout(() => {
-    d.classList.remove('entra');
-    setTimeout(() => d.remove(), 400);
+  return setTimeout(() => {
+    nodo.classList.remove('entra');
+    setTimeout(() => nodo.remove(), 400);
   }, vida);
 }
 
@@ -250,8 +306,9 @@ function pintarEstadoConexion() {
   if (!n) return;
   n.className = 'conexion ' + (ESTADO.conectado ? 'ok' : 'sin');
   n.title = ESTADO.conectado
-    ? 'Sincronizado con la nube'
-    : 'Sin conexión. Los cambios se guardan en este dispositivo y se suben al reconectar.';
+    ? 'Sincronizado: lo que escribís se guarda también en el servidor'
+    : 'Sin internet. Lo que escribís se guarda en esta computadora y se sube solo ' +
+      'cuando vuelva la conexión.';
 }
 
 /* ------------------------------------------------------- modelo paciente */

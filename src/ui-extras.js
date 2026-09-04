@@ -318,6 +318,20 @@ function ventanaAjustes() {
       dato('Versión', window.ALGOS_BUILD || '—')));
 
     if (firebaseConfigurado()) {
+      c.appendChild(superficie('Diagnóstico de conexión',
+        'Si algo no se guarda, esto dice exactamente por qué', ventanaRevision, 'fina'));
+    }
+
+    c.appendChild(superficie('Forzar actualización',
+      'Si ves una versión vieja aunque hayas subido una nueva', () => {
+        confirmar('Forzar actualización',
+          'Se borra la copia que el navegador guardó de la aplicación y se vuelve a ' +
+          'descargar desde cero. Los pacientes NO se tocan: están en la nube y en el ' +
+          'almacenamiento de este dispositivo, que es otra cosa distinta.',
+          forzarActualizacion, 'Sí, actualizar');
+      }, 'fina'));
+
+    if (firebaseConfigurado()) {
       c.insertAdjacentHTML('beforeend',
         '<h3 style="font-size:13px;text-transform:uppercase;letter-spacing:.05em;' +
         'color:var(--tinta-3);margin:18px 0 8px">Equipo</h3>');
@@ -554,4 +568,218 @@ function imprimirHistoria(id) {
   L.push('Firma y sello del médico tratante');
 
   imprimirTexto('Historia clínica de dolor — ' + nombreCompleto(p), L.join('\n'));
+}
+
+
+/* =========================================================================
+   DIAGNOSTICO DE CONEXION
+   -------------------------------------------------------------------------
+   "Se guardo en este dispositivo pero no en la nube" es un sintoma, no un
+   diagnostico: puede ser falta de internet, una sesion vencida, unas reglas
+   mal publicadas o una cuenta que no figura en el equipo. Las cuatro se ven
+   iguales desde afuera y tienen soluciones distintas.
+
+   Esta ventana prueba de verdad: lee y escribe en cada rama y dice cual
+   falla y que hacer. Es lo que evita el "no anda" sin mas informacion.
+   ========================================================================= */
+
+function ventanaRevision() {
+  abrir({id:'revision', titulo:'Diagnóstico de conexión',
+    sub:'Prueba real de lectura y escritura', ancha:true, dibujar(c) {
+
+      if (!firebaseConfigurado()) {
+        c.innerHTML = vacio('La aplicación está en modo local',
+          'No hay nada que diagnosticar: los datos viven solo en este dispositivo. ' +
+          'Para sincronizar hay que configurar Firebase (PUBLICAR.md, pasos 2 a 4).');
+        return;
+      }
+
+      const u = ESTADO.usuario || {};
+      const yo = miembroActual();
+
+      c.insertAdjacentHTML('beforeend', bloque('Quién sos para el servidor',
+        dato('Sesión', u.uid ? marca('iniciada', 'verde') : marca('sin sesión', 'rojo')) +
+        dato('Correo', esc(u.email || '—')) +
+        dato('Identificador (uid)', '<span class="mono" style="font-size:11.5px">' +
+          esc(u.uid || '—') + '</span>') +
+        dato('Figurás en el equipo', yo
+          ? marca('sí, como ' + ((ROLES[yo.rol] || {}).nombre || yo.rol), 'verde')
+          : marca('NO — esto explica cualquier fallo de guardado', 'rojo')) +
+        dato('Canal con el servidor', ESTADO.conectado
+          ? marca('abierto', 'verde') : marca('cerrado', 'ambar') +
+            '<div class="nota">El canal abierto no garantiza que puedas escribir: ' +
+            'eso lo deciden las reglas.</div>') +
+        dato('Versión que estás usando', '<span class="mono">' +
+          esc(window.ALGOS_BUILD || '—') + '</span>' +
+          '<div class="nota">Si no coincide con la última que subiste, el navegador ' +
+          'guardó una copia vieja: recargá con Cmd+Shift+R.</div>')));
+
+      /* El boton PRIMERO y la salida DEBAJO. Al reves, el resultado se
+         insertaba encima del boton: empujaba el boton hacia abajo y aparecia
+         fuera de donde uno esta mirando, con lo cual parecia que no habia
+         pasado nada. */
+      c.appendChild(superficie('Probar ahora',
+        'Escribe y borra un dato de prueba en cada rama', () => correr(), 'acento'));
+
+      const salida = document.createElement('div');
+      c.appendChild(salida);
+
+      function correr() {
+        console.log('[ASHA] Diagnóstico iniciado', new Date().toISOString());
+        salida.innerHTML =
+          '<div class="bloque" style="border-left:3px solid var(--acento)">' +
+          '<h3>Probando…</h3>' +
+          '<p class="nota">Escribiendo y borrando un dato de prueba en cada rama. ' +
+          'Tarda unos segundos. Si en 10 segundos no aparece el resultado, ' +
+          'es que el servidor no está contestando.</p></div>';
+        salida.scrollIntoView({block:'nearest'});
+        const marcaTiempo = 'prueba_' + Date.now();
+
+        /* Se prueban las ramas que la aplicacion usa de verdad. El dato de
+           prueba se borra enseguida: no queda basura en la base. */
+        const ramas = [
+          {r:'pacientes',    que:'las historias clínicas'},
+          {r:'precargas',    que:'los cuestionarios del portal'},
+          {r:'agenda',       que:'la agenda'},
+          {r:'equipo',       que:'el equipo'},
+          {r:'invitaciones', que:'las invitaciones'},
+          {r:'config',       que:'la configuración'}
+        ];
+
+        /* Tope de tiempo. Si Firebase no contesta, la promesa no se resuelve
+           NUNCA y la pantalla se queda muda: el usuario toca el boton, no pasa
+           nada, y no hay forma de saber si fallo o si esta esperando. Con el
+           tope, siempre hay respuesta. */
+        const conTope = (promesa, seg) => Promise.race([
+          promesa,
+          new Promise((_, rechazar) =>
+            setTimeout(() => rechazar(new Error('sin respuesta en ' + seg + ' segundos')),
+                       seg * 1000))
+        ]);
+
+        const pruebas = ramas.map(x =>
+          conTope(fbDb.ref('dolor/' + x.r).limitToFirst(1).once('value'), 8)
+            .then(() => ({...x, lectura:'ok'}))
+            .catch(e => ({...x, lectura:'falla', errorL:e.code || e.message}))
+            .then(res =>
+              conTope(fbDb.ref('dolor/' + x.r + '/' + marcaTiempo).set({prueba:true}), 8)
+                .then(() => fbDb.ref('dolor/' + x.r + '/' + marcaTiempo).remove().catch(() => {}))
+                .then(() => ({...res, escritura:'ok'}))
+                .catch(e => ({...res, escritura:'falla', errorE:e.code || e.message})))
+        );
+
+        /* Y la rama publica, que tiene que leerse SIN sesion. */
+        pruebas.push(
+          conTope(fbDb.ref('dolor/publico/instalado').once('value'), 8)
+            .then(s => ({r:'publico/instalado', que:'la marca de instalado',
+                         lectura:'ok', escritura:'—', valor:String(s.val())}))
+            .catch(e => ({r:'publico/instalado', que:'la marca de instalado',
+                          lectura:'falla', errorL:e.code || e.message, escritura:'—'})));
+
+        Promise.all(pruebas).then(res => {
+          const fallan = res.filter(x => x.lectura === 'falla' || x.escritura === 'falla');
+
+          let h = '<div class="bloque"><h3>Resultado</h3>';
+          for (const x of res) {
+            const okL = x.lectura === 'ok', okE = x.escritura !== 'falla';
+            h += '<div style="padding:8px 0;border-bottom:1px solid var(--linea)">' +
+                 '<b style="font-size:14px">' + esc(x.que) + '</b> ' +
+                 marca('leer: ' + (okL ? 'sí' : 'no'), okL ? 'verde' : 'rojo') + ' ' +
+                 (x.escritura === '—' ? ''
+                    : marca('escribir: ' + (okE ? 'sí' : 'no'), okE ? 'verde' : 'rojo')) +
+                 (x.valor !== undefined ? ' <span class="nota">valor: ' + esc(x.valor) + '</span>' : '') +
+                 ((x.errorL || x.errorE)
+                    ? '<div class="nota mono" style="margin-top:3px">' +
+                      esc([x.errorL, x.errorE].filter(Boolean).join(' · ')) + '</div>' : '') +
+                 '</div>';
+          }
+          h += '</div>';
+          salida.innerHTML = h;
+
+          /* La interpretacion, que es lo que de verdad hace falta. */
+          let conclusion;
+          if (!fallan.length) {
+            conclusion = '<div class="alerta info"><b>Todo funciona</b>' +
+              '<p>Se pudo leer y escribir en todas las ramas. Si igual ves el aviso ' +
+              'amarillo, lo más probable es que el navegador tenga guardada una versión ' +
+              'vieja de la aplicación: recargá con <b>Cmd+Shift+R</b>.</p></div>';
+          } else if (!ESTADO.usuario || !ESTADO.usuario.uid) {
+            conclusion = '<div class="alerta alto"><b>No hay sesión iniciada</b>' +
+              '<p>Sin sesión no se puede escribir nada. Salí y volvé a entrar.</p></div>';
+          } else if (!yo) {
+            conclusion = '<div class="alerta alto"><b>Tu cuenta no figura en el equipo</b>' +
+              '<p>Tenés sesión, pero las reglas exigen estar en la lista del equipo y tu ' +
+              'identificador no está. Nada de lo que escribas se va a guardar en el ' +
+              'servidor. Hay que agregar tu cuenta al equipo.</p></div>';
+          } else if (fallan.every(x => /permission/i.test((x.errorE || x.errorL || '')))) {
+            conclusion = '<div class="alerta alto"><b>El servidor rechaza por permisos</b>' +
+              '<p>La sesión está bien y figurás en el equipo, así que el problema está en ' +
+              'las <b>reglas</b> de la base: o no se publicaron, o se publicó una versión ' +
+              'incompleta. Volvé a pegar el contenido de <span class="mono">' +
+              'reglas-firebase.txt</span> completo, desde la primera llave hasta la ' +
+              'última, y tocá Publicar.</p>' +
+              '<p class="nota">Ramas que fallan: ' +
+              esc(fallan.map(x => x.que).join(', ')) + '</p></div>';
+          } else if (fallan.every(x => /sin respuesta/i.test((x.errorE || x.errorL || '')))) {
+            conclusion = '<div class="alerta alto"><b>El servidor no contesta</b>' +
+              '<p>Las pruebas se agotaron sin recibir respuesta. No es un problema de ' +
+              'permisos: directamente no hay diálogo con la base.</p>' +
+              '<p class="nota">Suele ser la conexión, o que la dirección de la base ' +
+              '(<span class="mono">databaseURL</span>) no sea la correcta. ' +
+              'Revisá que en Firebase exista la <b>Realtime Database</b> y no solo ' +
+              'Firestore.</p></div>';
+          } else {
+            conclusion = '<div class="alerta medio"><b>Falla intermitente</b>' +
+              '<p>Algunas ramas respondieron y otras no, y el error no es de permisos. ' +
+              'Suele ser la conexión. Probá de nuevo en un minuto.</p></div>';
+          }
+          salida.insertAdjacentHTML('beforeend', conclusion);
+          salida.scrollIntoView({block:'nearest', behavior:'smooth'});
+        })
+        .catch(e => {
+          /* Si algo revienta fuera de las pruebas, tambien hay que decirlo:
+             un boton que no deja rastro es peor que uno que informa un error. */
+          console.error('Diagnóstico:', e);
+          salida.innerHTML =
+            '<div class="alerta alto"><b>El diagnóstico no pudo terminar</b>' +
+            '<p class="mono" style="font-size:12px">' + esc(e && e.message ? e.message : String(e)) +
+            '</p><p class="nota">Suele ser falta de conexión. Probá de nuevo.</p></div>';
+        });
+      }
+    }});
+}
+
+
+/* -------------------------------------------------------------------------
+   FORZAR ACTUALIZACION
+   -------------------------------------------------------------------------
+   La salida cuando quedo una version vieja pegada. Borra el service worker y
+   todas sus copias, y recarga.
+
+   No toca los datos: los pacientes viven en localStorage y en Firebase, que
+   son almacenes distintos del cache de archivos. Vale la pena decirlo en el
+   propio aviso, porque "borrar" al lado de una historia clinica asusta, y con
+   razon.
+   ------------------------------------------------------------------------- */
+function forzarActualizacion() {
+  avisar('Borrando la copia guardada…', 'aviso');
+
+  const tareas = [];
+
+  if ('caches' in window) {
+    tareas.push(caches.keys().then(ks => Promise.all(ks.map(k => caches.delete(k)))));
+  }
+  if ('serviceWorker' in navigator) {
+    tareas.push(navigator.serviceWorker.getRegistrations()
+      .then(rs => Promise.all(rs.map(r => r.unregister()))));
+  }
+
+  Promise.all(tareas)
+    .catch(e => console.error('Forzar actualización:', e))
+    .then(() => {
+      /* El parametro sobrante obliga al navegador a pedir la pagina de nuevo
+         en vez de servir la que tiene guardada en su propio cache HTTP. */
+      const base = location.origin + location.pathname;
+      location.replace(base + '?actualizado=' + Date.now());
+    });
 }

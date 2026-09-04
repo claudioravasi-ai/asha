@@ -164,23 +164,42 @@ function opciones(nodo, lista, seleccion, alCambiar, multiple) {
   const cont = document.createElement('div');
   cont.className = 'opciones';
   const sel = new Set(multiple ? (seleccion || []) : (seleccion != null ? [seleccion] : []));
-  for (const o of lista) {
-    const valor = o.v !== undefined ? o.v : o;
-    const texto = o.t !== undefined ? o.t : o;
-    const b = document.createElement('div');
-    b.className = 'op' + (sel.has(valor) ? ' on' : '') +
-                  (o.clase ? ' ' + o.clase : '');
-    b.textContent = texto;
-    b.onclick = () => {
-      if (multiple) {
-        sel.has(valor) ? sel.delete(valor) : sel.add(valor);
-        alCambiar([...sel]);
-      } else {
-        alCambiar(sel.has(valor) ? null : valor);
-      }
-    };
-    cont.appendChild(b);
+
+  /* El grupo se repinta A SI MISMO al tocarlo.
+
+     Antes solo avisaba hacia afuera y daba por sentado que quien lo usaba iba
+     a redibujar la pantalla. Donde eso no pasaba —los descriptores del dolor,
+     entre otros— el dato se guardaba bien pero la opcion no se marcaba: el
+     paciente tocaba "Quemante", no veia ningun cambio, y volvia a tocar, con
+     lo cual la desmarcaba. Peor que no funcionar: funcionaba al reves de lo
+     que se veia. */
+  function pintar() {
+    cont.innerHTML = '';
+    for (const o of lista) {
+      const valor = o.v !== undefined ? o.v : o;
+      const texto = o.t !== undefined ? o.t : o;
+      const b = document.createElement('div');
+      b.className = 'op' + (sel.has(valor) ? ' on' : '') +
+                    (o.clase ? ' ' + o.clase : '');
+      b.textContent = texto;
+      b.onclick = () => {
+        if (multiple) {
+          sel.has(valor) ? sel.delete(valor) : sel.add(valor);
+          pintar();
+          alCambiar([...sel]);
+        } else {
+          const nuevo = sel.has(valor) ? null : valor;
+          sel.clear();
+          if (nuevo != null) sel.add(nuevo);
+          pintar();
+          alCambiar(nuevo);
+        }
+      };
+      cont.appendChild(b);
+    }
   }
+  pintar();
+
   nodo.appendChild(cont);
   return cont;
 }
@@ -189,18 +208,34 @@ function opciones(nodo, lista, seleccion, alCambiar, multiple) {
 function escalaNRS(nodo, valor, alCambiar, etiquetas) {
   const cont = document.createElement('div');
   cont.className = 'nrs';
-  for (let i = 0; i <= 10; i++) {
-    const n = document.createElement('div');
-    n.className = 'n' + (valor === i ? ' on' : '');
-    n.textContent = i;
-    if (valor === i) {
-      const c = colorDolor(i);
-      n.style.background = i === 0 ? 'var(--verde)' : c.color;
-      n.style.color = i >= 3 && i <= 6 ? '#3a2c00' : '#fff';
+
+  /* La escala se repinta A SI MISMA. Antes avisaba hacia afuera y quien la
+     usaba rehacia la pantalla entera, con lo cual el paciente elegia un
+     numero y la pagina lo devolvia al principio: tenia que volver a bajar con
+     el dedo por cada una de las cuatro intensidades. */
+  let actual = valor;
+
+  function pintar() {
+    cont.innerHTML = '';
+    for (let i = 0; i <= 10; i++) {
+      const n = document.createElement('div');
+      n.className = 'n' + (actual === i ? ' on' : '');
+      n.textContent = i;
+      if (actual === i) {
+        const c = colorDolor(i);
+        n.style.background = i === 0 ? 'var(--verde)' : c.color;
+        n.style.color = i >= 3 && i <= 6 ? '#3a2c00' : '#fff';
+      }
+      n.onclick = () => {
+        actual = (actual === i) ? null : i;
+        pintar();
+        alCambiar(actual);
+      };
+      cont.appendChild(n);
     }
-    n.onclick = () => alCambiar(valor === i ? null : i);
-    cont.appendChild(n);
   }
+  pintar();
+
   nodo.appendChild(cont);
   const pie = document.createElement('div');
   pie.className = 'nrs-pie';

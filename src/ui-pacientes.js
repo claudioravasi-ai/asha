@@ -96,6 +96,16 @@ function ventanaInicio() {
         }, 'fina'));
 
       c.appendChild(superficie('Ajustes y copia de seguridad', null, ventanaAjustes, 'fina'));
+
+      /* La version, siempre a la vista y al pie. Cuando alguien dice que no le
+         aparece algo, lo primero que hay que saber es que version esta usando:
+         casi siempre es una vieja que quedo en el cache del navegador. */
+      const v = versionLegible();
+      c.insertAdjacentHTML('beforeend',
+        '<p class="nota" style="text-align:center;margin-top:20px;padding-top:14px;' +
+        'border-top:1px solid var(--linea);font-size:11.5px">' +
+        esc(MARCA.nombre) + (MARCA.firma ? ' · ' + esc(MARCA.firma) : '') + '<br>' +
+        esc(v.texto) + '</p>');
     }
   });
 }

@@ -114,34 +114,58 @@ function crearPrecarga(dni, email, turno) {
   p.datos.dni = dni;
   p.datos.email = email;
 
-  guardar('precargas', token, p).then(() => {
+  pantallaPortal('Enviando…', '<p class="nota">Un momento.</p>');
+
+  /* El enlace NO se muestra en pantalla, ni siquiera cuando el envio falla.
+     Todo el sentido de mandarlo por correo es que llegue a la casilla que la
+     persona declaro: si ademas se lo mostraramos acá, cualquiera podria poner
+     el DNI de otro y entrar igual, y el correo dejaria de probar nada.
+
+     Por eso tampoco hay un boton de "empezar ahora": la unica puerta es el
+     mail. Si el envio falla, se dice que fallo y se lo deriva al consultorio. */
+  guardar('precargas', token, p).then(guardado => {
+    if (!guardado && fbDb) {
+      pantallaPortal('No pudimos registrar su solicitud',
+        '<p>Hubo un problema al guardar sus datos y no podemos enviarle el enlace.</p>' +
+        '<p class="nota">Por favor, comuníquese con el consultorio' +
+        (MARCA.telefono && MARCA.telefono !== '-' ? ' al <b>' + esc(MARCA.telefono) + '</b>' : '') +
+        (MARCA.whatsapp ? ' o por WhatsApp' : '') +
+        '. También puede completar el cuestionario en papel el día de la consulta.</p>');
+      return;
+    }
+
     const enlace = location.origin + location.pathname + '#c=' + token;
     enviarEnlacePorMail(email, enlace, dni).then(ok => {
-      const cont = $('#portal');
-      cont.innerHTML = '';
-      cont.insertAdjacentHTML('beforeend', cabezaPortal());
-      const v = document.createElement('section');
-      v.className = 'ventana';
-      v.innerHTML = '<header><div><h2>' +
-        (ok ? 'Le enviamos el enlace' : 'Su enlace está listo') +
-        '</h2></div></header><div class="cuerpo"></div>';
-      const c = $('.cuerpo', v);
-      c.insertAdjacentHTML('beforeend', ok
-        ? '<p>Revisá tu casilla <b>' + esc(email) + '</b>. Si no lo ves en unos minutos, ' +
-          'mirá en la carpeta de correo no deseado.</p>' +
-          '<p class="nota">Guardá ese mail: es el que te deja seguir completando el ' +
-          'cuestionario en otro momento.</p>'
-        : '<p>No pudimos enviar el correo en este momento. Usá este enlace y ' +
-          '<b>guardalo</b>: es el único que te va a permitir volver.</p>');
-      c.insertAdjacentHTML('beforeend',
-        '<div class="bloque"><h3>Su enlace</h3><p class="mono" style="word-break:break-all">' +
-        esc(enlace) + '</p></div>');
-      c.appendChild(superficie('Empezar ahora', 'Podés completarlo en varias veces', () => {
-        location.hash = 'c=' + token; location.reload();
-      }, 'acento'));
-      cont.appendChild(v);
+      if (ok) {
+        pantallaPortal('Le enviamos el enlace',
+          '<p>Revise su casilla <b>' + esc(email) + '</b>. Si no lo ve en unos minutos, ' +
+          'mire en la carpeta de correo no deseado.</p>' +
+          '<p><b>Guarde ese correo.</b> Ese enlace es el único que le permite entrar y ' +
+          'volver a entrar para seguir completando el cuestionario en otro momento.</p>' +
+          '<p class="nota">Ya puede cerrar esta página.</p>');
+      } else {
+        pantallaPortal('No pudimos enviarle el correo',
+          '<p>Sus datos quedaron registrados, pero el correo no pudo salir en este momento.</p>' +
+          '<p class="nota">Por favor, comuníquese con el consultorio' +
+          (MARCA.telefono && MARCA.telefono !== '-' ? ' al <b>' + esc(MARCA.telefono) + '</b>' : '') +
+          ' para que le reenvíen el enlace, o complete el cuestionario en papel el día ' +
+          'de la consulta.</p>');
+      }
     });
   });
+}
+
+/* Pantalla simple del portal: un titulo y un texto, sin nada mas que tocar.
+   Se usa para todos los finales de camino. */
+function pantallaPortal(titulo, cuerpoHTML) {
+  const cont = $('#portal');
+  cont.innerHTML = cabezaPortal();
+  const v = document.createElement('section');
+  v.className = 'ventana';
+  v.innerHTML = '<header><div><h2>' + esc(titulo) + '</h2></div></header>' +
+                '<div class="cuerpo">' + cuerpoHTML + '</div>';
+  cont.appendChild(v);
+  window.scrollTo(0, 0);
 }
 
 /* ------------------------------------------------- cargar y completar --- */
@@ -171,11 +195,14 @@ function cargarCuestionario(token) {
 
   const seguir = p => {
     if (!p) {
-      cont.innerHTML = '<div class="portal-cabeza"><b>' + esc(MARCA.nombre) + '</b></div>' +
-        '<section class="ventana"><header><div><h2>Enlace no encontrado</h2></div></header>' +
-        '<div class="cuerpo"><p>Este enlace no corresponde a ningún cuestionario. ' +
-        'Puede que esté incompleto: copialo entero desde el correo, incluida la parte ' +
-        'que va después del signo numeral.</p></div></section>';
+      pantallaPortal('No encontramos su cuestionario',
+        '<p>Este enlace no corresponde a ningún cuestionario.</p>' +
+        '<p class="nota">Lo más común es que se haya copiado cortado. El enlace es ' +
+        'largo y termina con una tira de letras y números después del signo <b>#</b>. ' +
+        'Volvé al correo y tocá directamente el botón, en vez de copiar y pegar.</p>' +
+        '<p class="nota">Si el problema sigue, comuniquese con el consultorio' +
+        (MARCA.telefono && MARCA.telefono !== '-' ? ' al ' + esc(MARCA.telefono) : '') +
+        ' para que le reenvíen el enlace.</p>');
       return;
     }
     if (p.estado === 'enviado' || p.estado === 'tomado') { pantallaYaEnviado(p); return; }
@@ -185,13 +212,24 @@ function cargarCuestionario(token) {
     pintarPaso();
   };
 
+  /* Si no se puede LEER, no es lo mismo que no exista: decir "no encontrado"
+     ante un problema de conexion hace que el paciente tire el enlace a la
+     basura creyendo que no sirve. Se distinguen los dos casos. */
+  const noSePudoLeer = e => {
+    console.error('Lectura de la precarga:', e);
+    pantallaPortal('No pudimos abrir su cuestionario',
+      '<p>El enlace es correcto, pero no pudimos conectarnos para abrirlo.</p>' +
+      '<p class="nota"><b>No borre el correo.</b> Vuelva a intentarlo en unos minutos, ' +
+      'o desde otra conexión.</p>');
+  };
+
   const local = ESTADO.precargas[token];
   if (local) return seguir(local);
-  if (fbDb) {
-    fbDb.ref('dolor/precargas/' + token).once('value')
-      .then(s => seguir(s.val()))
-      .catch(() => seguir(null));
-  } else seguir(null);
+
+  if (!fbDb) return seguir(null);
+  fbDb.ref('dolor/precargas/' + token).once('value')
+    .then(s => seguir(s.val()))
+    .catch(noSePudoLeer);
 }
 
 function guardarPrecarga() {
@@ -308,7 +346,7 @@ function pasoDolor(c, d) {
     const cc = document.createElement('div'); cc.className = 'campo';
     cc.innerHTML = '<label>' + esc(e.t) + '</label>';
     c.appendChild(cc);
-    escalaNRS(cc, d[e.k], v => { d[e.k] = v; guardarPrecarga(); pintarPaso(); });
+    escalaNRS(cc, d[e.k], v => { d[e.k] = v; guardarPrecarga(); });
   }
 
   const cp = document.createElement('div'); cp.className = 'campo';
@@ -518,18 +556,14 @@ function enviarCuestionario() {
 }
 
 function pantallaYaEnviado(p) {
-  const cont = $('#portal');
-  cont.innerHTML = cabezaPortal();
-  const v = document.createElement('section');
-  v.className = 'ventana';
-  v.innerHTML = '<header><div><h2>Cuestionario enviado</h2>' +
-    '<div class="sub">' + esc(fechaLarga(p.enviado || p.modificado)) + '</div></div></header>' +
-    '<div class="cuerpo"><p>Listo. El especialista va a tener sus respuestas antes de la consulta.</p>' +
+  pantallaPortal('Cuestionario enviado',
+    '<p class="nota" style="margin-bottom:12px">' +
+    esc(fechaLarga(p.enviado || p.modificado)) + '</p>' +
+    '<p>Listo. El especialista va a tener sus respuestas antes de la consulta.</p>' +
     '<p class="nota">Si necesita corregir algo, avísele el día del turno: desde acá ya no ' +
-    'se puede modificar, justamente para que lo que él ve sea exactamente lo que usted envió.</p>' +
-    (p.turno ? '<div class="bloque"><h3>Su turno</h3><p>' + esc(fechaLarga(p.turno)) + '</p></div>' : '') +
-    '</div>';
-  cont.appendChild(v);
+    'se puede modificar, justamente para que lo que ve el especialista sea exactamente lo ' +
+    'que usted envió.</p>' +
+    (p.turno ? '<div class="bloque"><h3>Su turno</h3><p>' + esc(fechaLarga(p.turno)) + '</p></div>' : ''));
 }
 
 /* -------------------------------------------------------------------------

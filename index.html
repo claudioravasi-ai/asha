@@ -14,7 +14,7 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icons/icon-192.png">
 <link rel="apple-touch-icon" href="icons/icon-192.png">
-<script>window.ALGOS_BUILD = "2026.09.04.1532";</script>
+<script>window.ALGOS_BUILD = "2026.09.04.1537";</script>
 <style>
 /* ==== styles.css ==== */
 /* =========================================================================
@@ -10655,6 +10655,15 @@ function ventanaAjustes() {
         'Si algo no se guarda, esto dice exactamente por qué', ventanaRevision, 'fina'));
     }
 
+    c.appendChild(superficie('Forzar actualización',
+      'Si ves una versión vieja aunque hayas subido una nueva', () => {
+        confirmar('Forzar actualización',
+          'Se borra la copia que el navegador guardó de la aplicación y se vuelve a ' +
+          'descargar desde cero. Los pacientes NO se tocan: están en la nube y en el ' +
+          'almacenamiento de este dispositivo, que es otra cosa distinta.',
+          forzarActualizacion, 'Sí, actualizar');
+      }, 'fina'));
+
     if (firebaseConfigurado()) {
       c.insertAdjacentHTML('beforeend',
         '<h3 style="font-size:13px;text-transform:uppercase;letter-spacing:.05em;' +
@@ -11071,6 +11080,41 @@ function ventanaRevision() {
         });
       }
     }});
+}
+
+
+/* -------------------------------------------------------------------------
+   FORZAR ACTUALIZACION
+   -------------------------------------------------------------------------
+   La salida cuando quedo una version vieja pegada. Borra el service worker y
+   todas sus copias, y recarga.
+
+   No toca los datos: los pacientes viven en localStorage y en Firebase, que
+   son almacenes distintos del cache de archivos. Vale la pena decirlo en el
+   propio aviso, porque "borrar" al lado de una historia clinica asusta, y con
+   razon.
+   ------------------------------------------------------------------------- */
+function forzarActualizacion() {
+  avisar('Borrando la copia guardada…', 'aviso');
+
+  const tareas = [];
+
+  if ('caches' in window) {
+    tareas.push(caches.keys().then(ks => Promise.all(ks.map(k => caches.delete(k)))));
+  }
+  if ('serviceWorker' in navigator) {
+    tareas.push(navigator.serviceWorker.getRegistrations()
+      .then(rs => Promise.all(rs.map(r => r.unregister()))));
+  }
+
+  Promise.all(tareas)
+    .catch(e => console.error('Forzar actualización:', e))
+    .then(() => {
+      /* El parametro sobrante obliga al navegador a pedir la pagina de nuevo
+         en vez de servir la que tiene guardada en su propio cache HTTP. */
+      const base = location.origin + location.pathname;
+      location.replace(base + '?actualizado=' + Date.now());
+    });
 }
 
 /* ================ demo.js ================ */

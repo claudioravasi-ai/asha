@@ -24,9 +24,10 @@ function iniciarAplicacion() {
   if (!$('#pila')) {
     document.body.innerHTML = window.ALGOS_BODY;
   }
-  $('#marcaNombre').textContent = MARCA.nombre;
-  $('#marcaFirma').textContent = MARCA.firma || '';
-  $('#marcaBajada').textContent = MARCA.bajada;
+  /* El nombre, la firma y la bajada ya vienen escritos en el HTML desde
+     build.py, asi que no hace falta volver a ponerlos: hacerlo producia un
+     parpadeo. Solo se enganchan aca por si el cuerpo se restauro. */
+  if (!$('#marcaNombre').textContent) $('#marcaNombre').textContent = MARCA.nombre;
   $('#volverInicio').onclick = () => volverA(0);
   pintarEstadoConexion();
   pintarUsuario();

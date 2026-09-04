@@ -420,7 +420,7 @@ function ventanaDolor(id) {
       {k:'nrsPeor', t:'En el peor momento'}, {k:'nrsMejor', t:'En el mejor momento'}]) {
       const cc = document.createElement('div'); cc.className = 'campo';
       cc.innerHTML = '<label>' + esc(e.t) + '</label>'; c.appendChild(cc);
-      escalaNRS(cc, d[e.k], v => { d[e.k] = v; g(); refrescar(); });
+      escalaNRS(cc, d[e.k], v => { d[e.k] = v; g(); });
     }
 
     const cp = document.createElement('div'); cp.className = 'campo';
