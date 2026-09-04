@@ -371,9 +371,25 @@ function pacienteNuevo() {
 
 /* --------------------------------------------------- busqueda y ordenes  */
 
+/* Una fila es basura de diagnostico si su clave empieza con guion bajo o si
+   lleva la marca _prueba. Se filtra en TODAS partes: en la lista, en los
+   contadores y en las estadisticas. Un registro tecnico no puede aparecer
+   nunca como si fuera una persona. */
+function esRestoDeDiagnostico(id, p) {
+  return String(id || '').startsWith('_') ||
+         String(id || '').startsWith('prueba_') ||
+         !!(p && p._prueba);
+}
+
+function pacientesReales() {
+  return Object.entries(ESTADO.pacientes)
+    .filter(([id, p]) => p && !esRestoDeDiagnostico(id, p))
+    .map(([, p]) => p);
+}
+
 function buscarPacientes(texto) {
   const q = normalizar(texto).trim();
-  const todos = Object.values(ESTADO.pacientes);
+  const todos = pacientesReales();
   if (!q) return todos.sort(porApellido);
   const dni = dniLimpio(texto);
   return todos.filter(p =>
@@ -494,6 +510,72 @@ function vigilarBorrados() {
   if (relojBorrados) clearInterval(relojBorrados);
   revisarBorradosPendientes();
   relojBorrados = setInterval(revisarBorradosPendientes, 30000);
+}
+
+/* =========================================================================
+   LIMPIEZA DE RESTOS DEL DIAGNOSTICO
+   -------------------------------------------------------------------------
+   El diagnostico de conexion escribia una fila con marca de tiempo en cada
+   rama para probar la escritura. Mientras existio el ciclo de redibujado, esa
+   prueba se relanzaba sola una y otra vez y dejo miles de filas en la base.
+
+   Esto las borra. Solo toca las que llevan la marca tecnica: las claves que
+   empiezan con guion bajo o con "prueba_", o los registros con _prueba. Un
+   paciente real no puede tener ninguna de las dos cosas, porque los
+   identificadores reales los genera uid() y siempre empiezan con "pac_".
+
+   Se borra en lotes de 400 con un solo update por lote: 5000 llamadas sueltas
+   tardarian minutos y muchas fallarian por saturacion.
+   ========================================================================= */
+
+function contarRestos() {
+  const cuenta = {};
+  for (const rama of ['pacientes', 'precargas', 'agenda', 'config']) {
+    const ids = Object.keys(ESTADO[rama] || {})
+      .filter(id => esRestoDeDiagnostico(id, ESTADO[rama][id]));
+    if (ids.length) cuenta[rama] = ids.length;
+  }
+  return cuenta;
+}
+
+function limpiarRestos(alAvanzar) {
+  const tareas = [];
+  let total = 0;
+
+  for (const rama of ['pacientes', 'precargas', 'agenda', 'config']) {
+    const ids = Object.keys(ESTADO[rama] || {})
+      .filter(id => esRestoDeDiagnostico(id, ESTADO[rama][id]));
+    if (!ids.length) continue;
+    total += ids.length;
+
+    for (const id of ids) delete ESTADO[rama][id];
+
+    if (fbDb) {
+      for (let i = 0; i < ids.length; i += 400) {
+        const lote = {};
+        for (const id of ids.slice(i, i + 400)) lote[id] = null;
+        tareas.push(() => fbDb.ref('dolor/' + rama).update(lote));
+      }
+    }
+  }
+
+  guardarLocal();
+  if (!tareas.length) return Promise.resolve({total, subidos:total, lotesFallados:0});
+
+  /* En serie y no en paralelo: mil borrados a la vez saturan la conexion.
+
+     Y cada lote atrapa su propio error. Si uno falla, los demas siguen: con
+     cinco mil registros, abandonar todo porque un lote se cayo obligaria a
+     empezar de nuevo. Al final se informa cuantos lotes no salieron, en vez
+     de decir "se borraron 0" cuando en realidad se borraron casi todos. */
+  let hechos = 0, fallados = 0;
+  return tareas.reduce(
+    (cadena, tarea) => cadena.then(() =>
+      tarea()
+        .catch(e => { fallados++; console.error('Lote de limpieza:', e); })
+        .then(() => { hechos++; if (alAvanzar) alAvanzar(hechos, tareas.length); })),
+    Promise.resolve()
+  ).then(() => ({total, lotes:tareas.length, lotesFallados:fallados}));
 }
 
 /* ------------------------------------------------------ copia de respaldo */

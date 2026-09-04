@@ -612,8 +612,12 @@ function sugerirPlan(sindromeId, p, c) {
   const s = SINDROMES.find(x => x.id === sindromeId);
   if (!s) return null;
 
-  const renalGrave = c.ante.has('renal') ||
-    (p.antecedentes && Number(p.antecedentes.filtrado) > 0 && Number(p.antecedentes.filtrado) < 30);
+  const filtrado = p.antecedentes ? Number(p.antecedentes.filtrado) : 0;
+  const renalGrave = c.ante.has('renal') || (filtrado > 0 && filtrado < 30);
+  /* El deterioro MODERADO tambien obliga a ajustar varios farmacos. Antes solo
+     lo avisaba el panel de seguridad y el plan sugerido no decia nada, asi que
+     el mismo dato producia dos respuestas distintas segun donde se mirara. */
+  const renalModerada = !renalGrave && filtrado >= 30 && filtrado < 60;
   const hepatica = c.ante.has('hepatica');
   const mayor = c.edad >= 65;
   const embarazo = c.ante.has('embarazo');
@@ -627,6 +631,8 @@ function sugerirPlan(sindromeId, p, c) {
     if (renalGrave) {
       if (/contraindicad/i.test(f.ajusteRenal || '')) reparos.push('CONTRAINDICADO con este filtrado renal');
       else if (/imprescindible|reducir|ajustar/i.test(f.ajusteRenal || '')) reparos.push('Requiere ajuste renal: ' + f.ajusteRenal);
+    } else if (renalModerada && /imprescindible|reducir|ajustar/i.test(f.ajusteRenal || '')) {
+      reparos.push('Filtrado ' + filtrado + ' ml/min: ajustar la dosis. ' + f.ajusteRenal);
     }
     if (hepatica && /contraindicad|evitar/i.test(f.ajusteHepatico || ''))
       reparos.push('Evitar por hepatopatía');

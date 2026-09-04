@@ -92,6 +92,33 @@ function ventanaHistoria(id) {
       const p = ESTADO.pacientes[ctx.id];
       if (!p) { c.innerHTML = vacio('Paciente no encontrado', 'Puede haber sido borrado desde otro dispositivo.'); return; }
 
+      /* Sin acceso clinico, la historia se reduce a la ficha administrativa:
+         quien es, como ubicarlo y cuando vuelve. Ni diagnostico, ni medicacion,
+         ni evoluciones, ni el motor. */
+      if (!puede('clinica')) {
+        c.insertAdjacentHTML('beforeend',
+          '<div class="bloque"><h2 style="font-size:19px">' + esc(nombreCompleto(p)) + '</h2>' +
+          '<div class="nota">' + esc([p.dni ? 'DNI ' + p.dni : '',
+            edadDe(p.fechaNac) ? edadDe(p.fechaNac) + ' años' : ''].filter(Boolean).join(' · ')) +
+          '</div></div>' +
+          bloque('Ficha administrativa',
+            dato('Documento', esc(p.dni)) +
+            dato('Nacimiento', p.fechaNac ? fechaCorta(p.fechaNac) : '—') +
+            dato('Teléfono', esc(p.telefono)) +
+            dato('Correo', esc(p.email)) +
+            dato('Obra social', esc(p.obraSocial)) +
+            dato('Nº de afiliado', esc(p.afiliado)) +
+            dato('Derivado por', esc(p.derivante)) +
+            dato('Próximo control', p.proximoControl ? fechaCorta(p.proximoControl) : '—')));
+        c.appendChild(superficie('Editar los datos de contacto y cobertura', null,
+          () => ventanaFiliacion(p.id), 'suave'));
+        c.insertAdjacentHTML('beforeend',
+          '<p class="nota" style="margin-top:14px">El contenido clínico de esta historia ' +
+          '—diagnóstico, medicación, evoluciones— lo ve únicamente el personal médico. ' +
+          'Tu rol es Secretaría.</p>');
+        return;
+      }
+
       const a = analizar(p);
       const ef = efectividadPaciente(p);
 
@@ -365,6 +392,13 @@ function ventanaFiliacion(id) {
     opciones(cs, [{t:'Femenino',v:'F'},{t:'Masculino',v:'M'},{t:'Otro',v:'X'}], p.sexo,
              v => { p.sexo = v; g(); refrescar(); });
 
+    if (!puede('clinica')) {
+      c.insertAdjacentHTML('beforeend',
+        '<p class="nota" style="margin-top:16px">Los antecedentes médicos y el resto de la ' +
+        'historia los completa el personal médico.</p>');
+      return;
+    }
+
     c.insertAdjacentHTML('beforeend', '<hr style="border:0;border-top:1px solid var(--linea);margin:20px 0">');
 
     const an = p.antecedentes;
@@ -380,6 +414,8 @@ function ventanaFiliacion(id) {
     campo(c, 'Filtrado glomerular (ml/min), si se conoce', an, 'filtrado',
       {tipo:'number', alCambiar:g,
        ayuda:'Con este dato la aplicación puede avisar de los ajustes de dosis por función renal.'});
+
+    if (!puede('clinica')) return;   // lo de abajo es clínico
 
     const ce = document.createElement('div'); ce.className = 'campo';
     ce.innerHTML = '<label>Antecedentes que el motor tiene en cuenta</label>' +

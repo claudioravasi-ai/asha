@@ -54,6 +54,17 @@ function reemplazar(def) {
    el lugar donde estaba escribiendo. */
 function refrescarVentanaActiva() {
   if (!PILA.length) return;
+
+  /* Algunas ventanas NO se pueden redibujar mientras trabajan.
+
+     El diagnostico de conexion escribe un dato de prueba en cada rama. Esa
+     escritura despierta al oyente de Firebase, que llama aca, que rehace la
+     ventana entera... y borra el resultado que el diagnostico estaba
+     escribiendo. Peor: al rehacerla, el diagnostico vuelve a arrancar y a
+     escribir, y se entra en un ciclo que congela la aplicacion.
+
+     Una ventana que se declara asi pide que la dejen en paz hasta terminar. */
+  if (PILA[PILA.length - 1].noRefrescar) return;
   const cuerpo = $('#pila .ventana:last-child .cuerpo');
   if (!cuerpo) { pintarPila(); return; }
   const y = cuerpo.scrollTop;

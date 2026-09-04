@@ -12,7 +12,7 @@ function ventanaInicio() {
   abrir({
     id:'inicio', titulo:MARCA.nombre, sub:MARCA.bajada, ancha:true,
     dibujar(c) {
-      const pacientes = Object.values(ESTADO.pacientes);
+      const pacientes = pacientesReales();
       const precargas = Object.values(ESTADO.precargas);
       const nuevos = precargas.filter(p => p.estado === 'enviado');
       const activos = pacientes.filter(p => p.proximoControl && p.proximoControl >= hoy());
@@ -36,7 +36,7 @@ function ventanaInicio() {
         c.appendChild(av);
       }
 
-      if (conBandera.length) {
+      if (conBandera.length && puede('clinica')) {
         c.insertAdjacentHTML('beforeend',
           '<div class="alerta urgente"><b>' + conBandera.length + ' paciente' +
           (conBandera.length === 1 ? '' : 's') + ' con bandera roja sin revisar</b>' +
@@ -58,14 +58,22 @@ function ventanaInicio() {
       teja(m, activos.length, 'En seguimiento',
         'Con control programado a futuro', () => ventanaPacientes('seguimiento'));
 
-      teja(m, agudos.length, 'Dolor agudo',
-        'Interconsultas y postoperatorios en curso', ventanaAgudo);
+      if (puede('clinica')) {
+        teja(m, agudos.length, 'Dolor agudo',
+          'Interconsultas y postoperatorios en curso', ventanaAgudo);
+      }
 
-      teja(m, '', 'Estadísticas',
-        'Efectividad, diagnósticos y carga opioide del consultorio', ventanaEstadisticas);
+      /* Lo clinico solo para quien tiene acceso clinico. Sin esto los roles
+         serian decorativos: la ficha del rol de secretaria promete que no ve
+         diagnostico ni medicacion, y esa promesa hay que cumplirla en el
+         codigo, no en el texto. */
+      if (puede('clinica')) {
+        teja(m, '', 'Estadísticas',
+          'Efectividad, diagnósticos y carga opioide del consultorio', ventanaEstadisticas);
 
-      teja(m, '', 'Biblioteca',
-        'Síndromes, vademécum, procedimientos y escalas', ventanaBiblioteca);
+        teja(m, '', 'Biblioteca',
+          'Síndromes, vademécum, procedimientos y escalas', ventanaBiblioteca);
+      }
 
       c.insertAdjacentHTML('beforeend', '<div style="height:14px"></div>');
       c.appendChild(superficie('+ Paciente nuevo',
@@ -158,9 +166,11 @@ function ventanaPacientes(filtro) {
 function filaPaciente(p) {
   const n = document.createElement('div');
   n.className = 'pac';
-  const ef = efectividadPaciente(p);
-  const dx = (p.diagnostico && p.diagnostico.sindrome) || 'Sin diagnóstico cargado';
-  const nrs = ultimoNRS(p);
+  const clinica = puede('clinica');
+  const ef = clinica ? efectividadPaciente(p) : {porcentaje:null};
+  const dx = clinica ? ((p.diagnostico && p.diagnostico.sindrome) || 'Sin diagnóstico cargado')
+                     : (p.dni ? 'DNI ' + p.dni : '');
+  const nrs = clinica ? ultimoNRS(p) : null;
   const ultima = (p.evoluciones || []).length
     ? p.evoluciones[p.evoluciones.length - 1].fecha : p.creado;
 
@@ -249,6 +259,23 @@ function ventanaVerPrecarga(token) {
     sub:'Cuestionario ' + (p.estado === 'enviado' ? 'enviado ' + desdeHace(p.enviado) : 'en borrador'),
     ancha:true,
     dibujar(c) {
+      if (!puede('clinica')) {
+        /* Vista de secretaría: identidad y turno, para agendar y recibir. */
+        c.insertAdjacentHTML('beforeend', bloque('Quién es',
+          dato('Documento', esc(d.dni || p.dni)) +
+          dato('Nacimiento', d.fechaNac ? fechaCorta(d.fechaNac) : '—') +
+          dato('Contacto', esc([d.telefono, d.email || p.email].filter(Boolean).join(' · '))) +
+          dato('Cobertura', esc(d.obraSocial)) +
+          dato('Derivado por', esc(d.derivante)) +
+          dato('Turno', p.turno ? fechaLarga(p.turno) : 'sin turno cargado') +
+          dato('Estado', p.estado === 'enviado' ? marca('completo, listo para la consulta', 'verde')
+                                                : marca('todavía lo está completando', 'ambar'))));
+        c.insertAdjacentHTML('beforeend',
+          '<p class="nota">El contenido clínico del cuestionario lo ve la médica. ' +
+          'Tu rol es Secretaría.</p>');
+        return;
+      }
+
       /* Lo primero, siempre: lo que el paciente marcó como síntoma de alarma. */
       if ((d.banderas || []).length) {
         const nombres = d.banderas.map(b =>
@@ -263,7 +290,7 @@ function ventanaVerPrecarga(token) {
           incorporarPrecarga(token);
         }, 'acento'));
 
-      const yaExiste = Object.values(ESTADO.pacientes).find(x => dniLimpio(x.dni) === dniLimpio(p.dni));
+      const yaExiste = pacientesReales().find(x => dniLimpio(x.dni) === dniLimpio(p.dni));
       if (yaExiste) {
         c.insertAdjacentHTML('beforeend',
           '<div class="alerta medio"><b>Ya hay un paciente con ese documento</b>' +
@@ -359,7 +386,7 @@ function incorporarPrecarga(token) {
   if (!pre) return;
   const d = pre.datos || {};
 
-  let p = Object.values(ESTADO.pacientes).find(x => dniLimpio(x.dni) === dniLimpio(pre.dni));
+  let p = pacientesReales().find(x => dniLimpio(x.dni) === dniLimpio(pre.dni));
   const esNuevo = !p;
   if (esNuevo) p = pacienteNuevo();
 

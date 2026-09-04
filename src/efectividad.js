@@ -103,7 +103,13 @@ function efectividadPaciente(p) {
     etiqueta:'Función', detalle:detalleFuncion};
 
   /* --- 3. impresión del paciente -------------------------------------- */
-  const pgic = ultimaEscala(p, 'pgic');
+  /* Se busca en TODO el historial y no solo en el valor vigente: si un PGIC
+     quedo anotado en un control y por lo que sea no se espejo al registro
+     principal, este dominio —que pesa un 20%— desaparecia del calculo sin
+     que nadie se enterara. */
+  const histPgic = historialEscala(p, 'pgic');
+  const pgic = histPgic.length ? histPgic[histPgic.length - 1].total
+                               : ultimaEscala(p, 'pgic');
   if (pgic == null) r.faltan.push('la impresión global de cambio del paciente (PGIC)');
   else {
     /* 4 es "sin cambios" y es el cero de la escala; 7 es el máximo. */

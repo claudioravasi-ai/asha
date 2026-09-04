@@ -7,7 +7,7 @@
 
 function ventanaEstadisticas() {
   abrir({id:'stats', titulo:'Estadísticas del consultorio', ancha:true, dibujar(c) {
-    const ps = Object.values(ESTADO.pacientes).filter(p => p.ambito !== 'agudo');
+    const ps = pacientesReales().filter(p => p.ambito !== 'agudo');
     if (!ps.length) {
       c.innerHTML = vacio('Todavía no hay datos', 'Las estadísticas aparecen cuando haya ' +
         'pacientes con evoluciones registradas.');
@@ -298,6 +298,41 @@ function ventanaCalculadoraMME() {
 
 function ventanaAjustes() {
   abrir({id:'ajustes', titulo:'Ajustes', ancha:true, dibujar(c) {
+    /* Si quedaron restos del diagnostico, es lo PRIMERO que hay que ver: son
+       filas tecnicas que ensucian el contador de pacientes. */
+    const restos = contarRestos();
+    const cuantos = Object.values(restos).reduce((a, b) => a + b, 0);
+    if (cuantos) {
+      c.insertAdjacentHTML('beforeend',
+        '<div class="alerta alto"><b>Hay ' + cuantos + ' registros de prueba en la base</b>' +
+        '<p>Los dejó el diagnóstico de conexión. No son pacientes: son filas técnicas ' +
+        'con una marca interna, y ya no se cuentan ni se muestran en ningún lado. ' +
+        'Igual conviene borrarlas.</p>' +
+        '<p class="nota">' + esc(Object.entries(restos)
+          .map(([r, n]) => n + ' en ' + r).join(' · ')) + '</p></div>');
+      c.appendChild(superficie('Borrar los ' + cuantos + ' registros de prueba',
+        'No toca ningún paciente real', () => {
+          const nodo = $('#pila .ventana:last-child .cuerpo');
+          avisar('Borrando ' + cuantos + ' registros…', 'aviso', 20000);
+          limpiarRestos((hechos, total) => {
+            if (total > 1) avisar('Borrando… lote ' + hechos + ' de ' + total, 'aviso', 3000);
+          }).then(r => {
+            if (r.lotesFallados) {
+              avisar('Se borraron ' + r.total + ' registros de este dispositivo, pero ' +
+                     r.lotesFallados + ' de ' + r.lotes + ' lotes no se pudieron borrar del ' +
+                     'servidor. Volvé a tocar el botón para reintentar.', 'error', 14000);
+            } else {
+              avisar('Listo: se borraron ' + r.total + ' registros de prueba.', 'ok', 8000);
+            }
+            refrescar();
+          }).catch(e => {
+            console.error(e);
+            avisar('No se pudo completar la limpieza. Probá de nuevo.', 'error');
+            refrescar();
+          });
+        }, 'acento'));
+    }
+
     c.insertAdjacentHTML('beforeend', bloque('Estado de la aplicación',
       dato('Sincronización', ESTADO.conectado
         ? marca('conectada a la nube', 'verde')
@@ -585,7 +620,13 @@ function imprimirHistoria(id) {
 
 function ventanaRevision() {
   abrir({id:'revision', titulo:'Diagnóstico de conexión',
-    sub:'Prueba real de lectura y escritura', ancha:true, dibujar(c) {
+    sub:'Prueba real de lectura y escritura', ancha:true,
+    /* Esta ventana escribe en la base, y esa escritura despierta al oyente que
+       redibuja la ventana activa. Sin esta marca la pantalla se rehace sola en
+       medio de la prueba, borra el resultado y vuelve a arrancarla: la
+       aplicacion se cuelga. */
+    noRefrescar: true,
+    dibujar(c) {
 
       if (!firebaseConfigurado()) {
         c.innerHTML = vacio('La aplicación está en modo local',
@@ -618,47 +659,48 @@ function ventanaRevision() {
          insertaba encima del boton: empujaba el boton hacia abajo y aparecia
          fuera de donde uno esta mirando, con lo cual parecia que no habia
          pasado nada. */
-      c.appendChild(superficie('Probar de nuevo',
-        'Vuelve a escribir y borrar un dato de prueba en cada rama',
-        () => correr(), 'acento'));
+      c.appendChild(superficie('Probar ahora',
+        'Escribe y borra un dato de prueba en cada rama', () => correr(), 'acento'));
 
       const salida = document.createElement('div');
       c.appendChild(salida);
-
-      /* Corre SOLO al abrir la ventana, sin esperar a que nadie toque nada.
-
-         Un diagnostico que depende de un boton tiene un punto de falla mas: si
-         el boton no responde —o si uno cree que no responde— no hay manera de
-         saber que pasa, que es justo lo contrario de para lo que existe esta
-         pantalla. El boton queda, pero solo para repetir la prueba. */
-      setTimeout(correr, 60);
 
       function correr() {
         console.log('[ASHA] Diagnóstico iniciado', new Date().toISOString());
         salida.innerHTML =
           '<div class="bloque" style="border-left:3px solid var(--acento)">' +
           '<h3>Probando…</h3>' +
-          '<p class="nota">Escribiendo y borrando un dato de prueba en cada rama. ' +
-          'Tarda unos segundos. Si en 10 segundos no aparece el resultado, ' +
-          'es que el servidor no está contestando.</p></div>';
+          '<p class="nota">Tarda unos segundos. Si en 10 segundos no aparece el ' +
+          'resultado, es que el servidor no está contestando.</p></div>';
         salida.scrollIntoView({block:'nearest'});
-        const marcaTiempo = 'prueba_' + Date.now();
 
-        /* Se prueban las ramas que la aplicacion usa de verdad. El dato de
-           prueba se borra enseguida: no queda basura en la base. */
+        /* UNA clave fija, no una con marca de tiempo.
+           Con marca de tiempo, cada corrida dejaba una fila nueva; y mientras
+           existio el ciclo de redibujado, cientos. Con clave fija, correr el
+           diagnostico mil veces deja como mucho un registro, que ademas se
+           borra al terminar. */
+        const CLAVE = '_diagnostico';
+
+        /* Cada rama se prueba con un dato que RESPETA su validacion.
+           Un {prueba:true} en precargas era rechazado por la regla que exige
+           token, dni y estado: la prueba decia "sin permiso" cuando en realidad
+           las reglas estaban haciendo bien su trabajo, y eso es peor que no
+           probar nada.
+
+           equipo e invitaciones se prueban SOLO de lectura: escribir ahi
+           crearia un miembro o una invitacion falsos, aunque fuera por un
+           instante, y no vale la pena por un diagnostico. */
         const ramas = [
-          {r:'pacientes',    que:'las historias clínicas'},
-          {r:'precargas',    que:'los cuestionarios del portal'},
-          {r:'agenda',       que:'la agenda'},
-          {r:'equipo',       que:'el equipo'},
-          {r:'invitaciones', que:'las invitaciones'},
-          {r:'config',       que:'la configuración'}
+          {r:'pacientes', que:'las historias clínicas',
+           dato:{_prueba:true, apellido:'(prueba de diagnóstico)'}},
+          {r:'precargas', que:'los cuestionarios del portal',
+           dato:{token:'0'.repeat(48), dni:'0', estado:'borrador', _prueba:true}},
+          {r:'agenda', que:'la agenda', dato:{_prueba:true}},
+          {r:'config', que:'la configuración', dato:{_prueba:true}},
+          {r:'equipo', que:'el equipo', soloLectura:true},
+          {r:'invitaciones', que:'las invitaciones', soloLectura:true}
         ];
 
-        /* Tope de tiempo. Si Firebase no contesta, la promesa no se resuelve
-           NUNCA y la pantalla se queda muda: el usuario toca el boton, no pasa
-           nada, y no hay forma de saber si fallo o si esta esperando. Con el
-           tope, siempre hay respuesta. */
         const conTope = (promesa, seg) => Promise.race([
           promesa,
           new Promise((_, rechazar) =>
@@ -670,14 +712,15 @@ function ventanaRevision() {
           conTope(fbDb.ref('dolor/' + x.r).limitToFirst(1).once('value'), 8)
             .then(() => ({...x, lectura:'ok'}))
             .catch(e => ({...x, lectura:'falla', errorL:e.code || e.message}))
-            .then(res =>
-              conTope(fbDb.ref('dolor/' + x.r + '/' + marcaTiempo).set({prueba:true}), 8)
-                .then(() => fbDb.ref('dolor/' + x.r + '/' + marcaTiempo).remove().catch(() => {}))
+            .then(res => {
+              if (x.soloLectura) return {...res, escritura:'—'};
+              return conTope(fbDb.ref('dolor/' + x.r + '/' + CLAVE).set(x.dato), 8)
+                .then(() => fbDb.ref('dolor/' + x.r + '/' + CLAVE).remove().catch(() => {}))
                 .then(() => ({...res, escritura:'ok'}))
-                .catch(e => ({...res, escritura:'falla', errorE:e.code || e.message})))
+                .catch(e => ({...res, escritura:'falla', errorE:e.code || e.message}));
+            })
         );
 
-        /* Y la rama publica, que tiene que leerse SIN sesion. */
         pruebas.push(
           conTope(fbDb.ref('dolor/publico/instalado').once('value'), 8)
             .then(s => ({r:'publico/instalado', que:'la marca de instalado',
@@ -694,7 +737,8 @@ function ventanaRevision() {
             h += '<div style="padding:8px 0;border-bottom:1px solid var(--linea)">' +
                  '<b style="font-size:14px">' + esc(x.que) + '</b> ' +
                  marca('leer: ' + (okL ? 'sí' : 'no'), okL ? 'verde' : 'rojo') + ' ' +
-                 (x.escritura === '—' ? ''
+                 (x.escritura === '—'
+                    ? '<span class="nota">escritura no probada</span>'
                     : marca('escribir: ' + (okE ? 'sí' : 'no'), okE ? 'verde' : 'rojo')) +
                  (x.valor !== undefined ? ' <span class="nota">valor: ' + esc(x.valor) + '</span>' : '') +
                  ((x.errorL || x.errorE)
@@ -702,52 +746,40 @@ function ventanaRevision() {
                       esc([x.errorL, x.errorE].filter(Boolean).join(' · ')) + '</div>' : '') +
                  '</div>';
           }
-          h += '</div>';
+          h += '<p class="nota" style="margin-top:10px">En el equipo y las invitaciones ' +
+               'solo se prueba la lectura: escribir ahí crearía un miembro o una invitación ' +
+               'falsos, y no vale la pena por una prueba.</p></div>';
           salida.innerHTML = h;
 
-          /* La interpretacion, que es lo que de verdad hace falta. */
           let conclusion;
           if (!fallan.length) {
             conclusion = '<div class="alerta info"><b>Todo funciona</b>' +
-              '<p>Se pudo leer y escribir en todas las ramas. Si igual ves el aviso ' +
-              'amarillo, lo más probable es que el navegador tenga guardada una versión ' +
-              'vieja de la aplicación: recargá con <b>Cmd+Shift+R</b>.</p></div>';
+              '<p>Se pudo leer en todas las ramas y escribir en las que corresponde. ' +
+              'La sincronización con el servidor está bien.</p></div>';
           } else if (!ESTADO.usuario || !ESTADO.usuario.uid) {
             conclusion = '<div class="alerta alto"><b>No hay sesión iniciada</b>' +
               '<p>Sin sesión no se puede escribir nada. Salí y volvé a entrar.</p></div>';
           } else if (!yo) {
             conclusion = '<div class="alerta alto"><b>Tu cuenta no figura en el equipo</b>' +
-              '<p>Tenés sesión, pero las reglas exigen estar en la lista del equipo y tu ' +
-              'identificador no está. Nada de lo que escribas se va a guardar en el ' +
-              'servidor. Hay que agregar tu cuenta al equipo.</p></div>';
-          } else if (fallan.every(x => /permission/i.test((x.errorE || x.errorL || '')))) {
-            conclusion = '<div class="alerta alto"><b>El servidor rechaza por permisos</b>' +
-              '<p>La sesión está bien y figurás en el equipo, así que el problema está en ' +
-              'las <b>reglas</b> de la base: o no se publicaron, o se publicó una versión ' +
-              'incompleta. Volvé a pegar el contenido de <span class="mono">' +
-              'reglas-firebase.txt</span> completo, desde la primera llave hasta la ' +
-              'última, y tocá Publicar.</p>' +
-              '<p class="nota">Ramas que fallan: ' +
-              esc(fallan.map(x => x.que).join(', ')) + '</p></div>';
+              '<p>Tenés sesión, pero las reglas exigen estar en la lista del equipo. ' +
+              'Nada de lo que escribas se va a guardar en el servidor.</p></div>';
           } else if (fallan.every(x => /sin respuesta/i.test((x.errorE || x.errorL || '')))) {
             conclusion = '<div class="alerta alto"><b>El servidor no contesta</b>' +
-              '<p>Las pruebas se agotaron sin recibir respuesta. No es un problema de ' +
-              'permisos: directamente no hay diálogo con la base.</p>' +
-              '<p class="nota">Suele ser la conexión, o que la dirección de la base ' +
-              '(<span class="mono">databaseURL</span>) no sea la correcta. ' +
-              'Revisá que en Firebase exista la <b>Realtime Database</b> y no solo ' +
-              'Firestore.</p></div>';
+              '<p>Las pruebas se agotaron sin respuesta. No es un problema de permisos: ' +
+              'directamente no hay diálogo con la base.</p>' +
+              '<p class="nota">Suele ser la conexión, o que la dirección de la base no sea ' +
+              'la correcta. Revisá que en Firebase exista la <b>Realtime Database</b>.</p></div>';
           } else {
-            conclusion = '<div class="alerta medio"><b>Falla intermitente</b>' +
-              '<p>Algunas ramas respondieron y otras no, y el error no es de permisos. ' +
-              'Suele ser la conexión. Probá de nuevo en un minuto.</p></div>';
+            conclusion = '<div class="alerta alto"><b>El servidor rechaza algunas escrituras</b>' +
+              '<p>Ramas que fallan: ' + esc(fallan.map(x => x.que).join(', ')) + '.</p>' +
+              '<p class="nota">Volvé a pegar el contenido de <span class="mono">' +
+              'reglas-firebase.txt</span> completo, desde la primera llave hasta la última, ' +
+              'y tocá Publicar.</p></div>';
           }
           salida.insertAdjacentHTML('beforeend', conclusion);
           salida.scrollIntoView({block:'nearest', behavior:'smooth'});
         })
         .catch(e => {
-          /* Si algo revienta fuera de las pruebas, tambien hay que decirlo:
-             un boton que no deja rastro es peor que uno que informa un error. */
           console.error('Diagnóstico:', e);
           salida.innerHTML =
             '<div class="alerta alto"><b>El diagnóstico no pudo terminar</b>' +
@@ -755,6 +787,7 @@ function ventanaRevision() {
             '</p><p class="nota">Suele ser falta de conexión. Probá de nuevo.</p></div>';
         });
       }
+
     }});
 }
 

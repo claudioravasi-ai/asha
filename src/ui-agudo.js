@@ -90,7 +90,7 @@ const ESQUEMAS_AGUDO = {
 
 function ventanaAgudo() {
   abrir({id:'agudo', titulo:'Dolor agudo y postoperatorio', ancha:true, dibujar(c) {
-    const activos = Object.values(ESTADO.pacientes)
+    const activos = pacientesReales()
       .filter(p => p.ambito === 'agudo' && !p.altaAgudo)
       .sort((a, b) => (b.modificado || '').localeCompare(a.modificado || ''));
 
