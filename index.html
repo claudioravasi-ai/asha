@@ -14,7 +14,7 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icons/icon-192.png">
 <link rel="apple-touch-icon" href="icons/icon-192.png">
-<script>window.ALGOS_BUILD = "2026.09.04.1514";</script>
+<script>window.ALGOS_BUILD = "2026.09.04.1525";</script>
 <style>
 /* ==== styles.css ==== */
 /* =========================================================================
@@ -10931,14 +10931,22 @@ function ventanaRevision() {
             '<div class="nota">El canal abierto no garantiza que puedas escribir: ' +
             'eso lo deciden las reglas.</div>')));
 
-      const salida = document.createElement('div');
-      c.appendChild(salida);
-
+      /* El boton PRIMERO y la salida DEBAJO. Al reves, el resultado se
+         insertaba encima del boton: empujaba el boton hacia abajo y aparecia
+         fuera de donde uno esta mirando, con lo cual parecia que no habia
+         pasado nada. */
       c.appendChild(superficie('Probar ahora',
         'Escribe y borra un dato de prueba en cada rama', () => correr(), 'acento'));
 
+      const salida = document.createElement('div');
+      c.appendChild(salida);
+
       function correr() {
-        salida.innerHTML = '<div class="bloque"><h3>Probando…</h3></div>';
+        salida.innerHTML =
+          '<div class="bloque"><h3>Probando…</h3>' +
+          '<p class="nota">Escribiendo y borrando un dato de prueba en cada rama. ' +
+          'Tarda unos segundos.</p></div>';
+        salida.scrollIntoView({block:'nearest'});
         const marcaTiempo = 'prueba_' + Date.now();
 
         /* Se prueban las ramas que la aplicacion usa de verdad. El dato de
@@ -11021,6 +11029,16 @@ function ventanaRevision() {
               'Suele ser la conexión. Probá de nuevo en un minuto.</p></div>';
           }
           salida.insertAdjacentHTML('beforeend', conclusion);
+          salida.scrollIntoView({block:'nearest', behavior:'smooth'});
+        })
+        .catch(e => {
+          /* Si algo revienta fuera de las pruebas, tambien hay que decirlo:
+             un boton que no deja rastro es peor que uno que informa un error. */
+          console.error('Diagnóstico:', e);
+          salida.innerHTML =
+            '<div class="alerta alto"><b>El diagnóstico no pudo terminar</b>' +
+            '<p class="mono" style="font-size:12px">' + esc(e && e.message ? e.message : String(e)) +
+            '</p><p class="nota">Suele ser falta de conexión. Probá de nuevo.</p></div>';
         });
       }
     }});
