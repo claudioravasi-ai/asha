@@ -1,0 +1,184 @@
+REGLAS DE SEGURIDAD DE LA REALTIME DATABASE — ASHA
+===================================================================
+
+DONDE SE PEGAN
+  console.firebase.google.com  ->  el proyecto  ->  Realtime Database
+  ->  pestaña "Reglas"  ->  reemplazar TODO por el bloque de abajo
+  ->  Publicar
+
+QUE HACEN, EN CASTELLANO
+-------------------------------------------------------------------
+
+1. TENER CUENTA NO ALCANZA.
+   El registro por correo de Firebase esta abierto por diseño: la clave del
+   proyecto viaja dentro del index.html, que es publico, asi que cualquiera
+   que conozca la direccion puede crearse una cuenta. Por eso estas reglas NO
+   preguntan "¿estas logueado?" sino "¿figuras en /dolor/equipo?".
+   Una cuenta que no fue invitada no puede leer ni escribir nada.
+
+2. LAS ALTAS SON POR INVITACION.
+   Alguien puede escribir su propio registro en /dolor/equipo solo si:
+     · escribe el suyo y no el de otro,
+     · todavia no existe (no se puede pisar el propio rol),
+     · presenta un codigo de invitacion que existe, que no fue usado, y que
+       fue emitido PARA SU CORREO,
+     · y se asigna el rol que dice esa invitacion, no el que quiera.
+   Las invitaciones solo las crea el titular.
+
+3. LA PRIMERA CUENTA ES LA EXCEPCION.
+   Mientras /dolor/equipo esta vacio, se permite crear la primera cuenta sin
+   codigo, y queda como titular. Es la unica ventana abierta del sistema y se
+   cierra sola en cuanto hay un miembro.
+   >>> POR ESO HAY QUE CREAR ESA CUENTA APENAS SE PUBLICA LA APLICACION. <<<
+
+4. EL PACIENTE NO TIENE CUENTA Y NO LA VA A TENER.
+   La rama de precargas es la unica que acepta escritura sin cuenta. Pero:
+     · NO se puede LISTAR la rama entera: nadie puede pedir "dame todos los
+       cuestionarios";
+     · un cuestionario individual solo se lee conociendo su token, que tiene
+       48 caracteres al azar y viaja unicamente al correo que la persona
+       declaro;
+     · un cuestionario ya ENVIADO no se puede modificar sin cuenta: lo que el
+       medico ve es exactamente lo que el paciente mando.
+
+===================================================================
+COPIAR DESDE LA LLAVE DE ABAJO HASTA LA ULTIMA LLAVE
+===================================================================
+
+{
+  "rules": {
+    "dolor": {
+
+      "equipo": {
+        ".read": "auth != null && root.child('dolor/equipo').child(auth.uid).exists()",
+
+        "$uid": {
+          ".read": "auth != null && auth.uid === $uid",
+
+          ".write": "auth != null && auth.uid === $uid && !data.exists() && (
+                       !root.child('dolor/equipo').exists()
+                       ||
+                       (
+                         newData.child('codigo').val() != null &&
+                         root.child('dolor/invitaciones').child(newData.child('codigo').val()).exists() &&
+                         root.child('dolor/invitaciones').child(newData.child('codigo').val()).child('usada').val() !== true &&
+                         root.child('dolor/invitaciones').child(newData.child('codigo').val()).child('email').val() === auth.token.email &&
+                         root.child('dolor/invitaciones').child(newData.child('codigo').val()).child('rol').val() === newData.child('rol').val()
+                       )
+                     )
+                     ||
+                     root.child('dolor/equipo').child(auth.uid).child('rol').val() === 'titular'",
+
+          ".validate": "newData.hasChildren(['uid','email','nombre','rol','alta']) &&
+                        newData.child('uid').val() === $uid",
+
+          "rol": {
+            ".validate": "newData.val() === 'titular' ||
+                          newData.val() === 'medico'  ||
+                          newData.val() === 'secretaria'"
+          }
+        }
+      },
+
+      "invitaciones": {
+        ".read":  "auth != null && root.child('dolor/equipo').child(auth.uid).exists()",
+        ".write": "auth != null && root.child('dolor/equipo').child(auth.uid).child('rol').val() === 'titular'",
+
+        "$codigo": {
+          ".read":  true,
+          ".write": "auth != null && (
+                       root.child('dolor/equipo').child(auth.uid).child('rol').val() === 'titular'
+                       ||
+                       (data.exists() && data.child('email').val() === auth.token.email)
+                     )",
+          ".validate": "newData.hasChildren(['codigo','email','rol'])"
+        }
+      },
+
+      "pacientes": {
+        ".read":  "auth != null && root.child('dolor/equipo').child(auth.uid).exists()",
+        ".write": "auth != null && root.child('dolor/equipo').child(auth.uid).exists()",
+        ".indexOn": ["dni", "apellido"]
+      },
+
+      "agenda": {
+        ".read":  "auth != null && root.child('dolor/equipo').child(auth.uid).exists()",
+        ".write": "auth != null && root.child('dolor/equipo').child(auth.uid).exists()"
+      },
+
+      "config": {
+        ".read":  "auth != null && root.child('dolor/equipo').child(auth.uid).exists()",
+        ".write": "auth != null && root.child('dolor/equipo').child(auth.uid).child('rol').val() === 'titular'"
+      },
+
+      "precargas": {
+        ".read": "auth != null && root.child('dolor/equipo').child(auth.uid).exists()",
+        ".indexOn": ["estado", "dni", "turno"],
+
+        "$token": {
+          ".read": true,
+
+          ".write": "root.child('dolor/equipo').child(auth.uid).exists() || (
+                       $token.length >= 40 &&
+                       newData.exists() &&
+                       newData.hasChildren(['token','dni','estado']) &&
+                       newData.child('token').val() === $token &&
+                       (!data.exists() || data.child('estado').val() === 'borrador') &&
+                       newData.child('estado').val() !== 'tomado'
+                     )",
+
+          ".validate": "newData.hasChildren(['token','dni','estado'])",
+
+          "estado": {
+            ".validate": "newData.isString() &&
+                          (newData.val() === 'borrador' ||
+                           newData.val() === 'enviado'  ||
+                           newData.val() === 'tomado')"
+          },
+          "dni":   {".validate": "newData.isString() && newData.val().length <= 20"},
+          "email": {".validate": "newData.isString() && newData.val().length <= 120"},
+          "token": {".validate": "newData.isString() && newData.val().length >= 40"}
+        }
+      }
+    }
+  }
+}
+
+===================================================================
+COMO VERIFICAR QUE QUEDARON BIEN — HACERLO, NO SALTEARLO
+===================================================================
+
+En "Simulador de reglas", probar estas cinco cosas:
+
+  UBICACION                        TIPO      AUTENTICADO   ESPERADO
+  ---------------------------------------------------------------------
+  /dolor/pacientes                 Lectura   No            DENEGADO
+  /dolor/precargas                 Lectura   No            DENEGADO
+  /dolor/equipo                    Lectura   No            DENEGADO
+  /dolor/pacientes                 Lectura   Si, uid=xyz   DENEGADO
+                                             (uid inventado, que no esta
+                                              en el equipo)
+  /dolor/precargas/<token largo>   Lectura   No            PERMITIDO
+
+Las primeras CUATRO tienen que dar DENEGADO. La cuarta es la importante y es
+la que las reglas viejas no cubrian: un usuario logueado que no pertenece al
+equipo tampoco puede leer nada.
+
+Si alguna de las cuatro da PERMITIDO, las reglas no se publicaron bien.
+NO cargues ningun paciente real hasta que esto de bien.
+
+===================================================================
+DESPUES DE PEGARLAS
+===================================================================
+
+1. Authentication -> Sign-in method -> habilitar "Correo electronico/contraseña".
+   (Hace falta para que la gente pueda registrarse desde la aplicacion.)
+
+2. Abrir la aplicacion y tocar "Crear mi cuenta".
+   Como el equipo esta vacio, no pide codigo: quedas como TITULAR.
+   HACELO AHORA, no dentro de unos dias.
+
+3. Desde la aplicacion: Ajustes -> Equipo -> "Invitar a alguien"
+   para dar de alta al resto. Una cuenta por persona, nunca compartida.
+
+Ya no hace falta volver a la consola de Firebase para las altas.
