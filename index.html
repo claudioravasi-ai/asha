@@ -14,7 +14,7 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icons/icon-192.png">
 <link rel="apple-touch-icon" href="icons/icon-192.png">
-<script>window.ALGOS_BUILD = "2026.09.04.1448";</script>
+<script>window.ALGOS_BUILD = "2026.09.04.1514";</script>
 <style>
 /* ==== styles.css ==== */
 /* =========================================================================
@@ -134,10 +134,16 @@ input,select,textarea,button{font:inherit; color:inherit}
   flex:1; display:flex; align-items:stretch; gap:10px;
   padding:12px; overflow-x:auto; overflow-y:hidden;
   background:var(--lienzo); scroll-behavior:smooth;
+  /* Centrado, para que en un monitor ancho la pila no quede pegada a la
+     izquierda con una franja gris al costado. El "safe" es imprescindible:
+     sin el, cuando el contenido no entra, el centrado corta el principio y
+     ya no se puede llegar a el ni con scroll. */
+  justify-content:safe center;
 }
 
 .lomo{
-  flex:0 0 46px; background:var(--ventana); border:1px solid var(--linea);
+  flex:0 0 46px;
+  background:var(--ventana); border:1px solid var(--linea);
   border-radius:var(--r); cursor:pointer; position:relative;
   display:flex; align-items:center; justify-content:center;
   transition:flex-basis .18s ease, background .18s ease;
@@ -153,13 +159,18 @@ input,select,textarea,button{font:inherit; color:inherit}
 .lomo:hover b{color:var(--acento-tinta)}
 
 .ventana{
-  flex:1 1 620px; min-width:340px; max-width:820px;
+  /* flex-basis en 0 y no en 620: con una base grande, la ventana y los lomos
+     se disputan el espacio proporcionalmente y siempre sobran unos pixeles
+     que producen una barra horizontal por nada. Con base 0, la ventana toma
+     exactamente lo que queda despues de los lomos: no puede desbordar.
+     El max-width sigue poniendo el limite de lectura en pantallas anchas. */
+  flex:1 1 0; min-width:0; max-width:900px;
   background:var(--ventana); border:1px solid var(--linea);
   border-radius:var(--r); box-shadow:var(--sombra-alta);
   display:flex; flex-direction:column; overflow:hidden;
   animation:entra .22s cubic-bezier(.2,.8,.3,1);
 }
-.ventana.ancha{max-width:1080px; flex-basis:900px}
+.ventana.ancha{max-width:1280px}
 @keyframes entra{from{opacity:0; transform:translateX(18px) scale(.99)} to{opacity:1; transform:none}}
 
 .ventana > header{
@@ -455,9 +466,14 @@ body.portal{overflow:auto; background:var(--lienzo)}
 
 /* ====================================================== TELEFONO ======= */
 
-@media(max-width:760px){
+@media(max-width:900px){
   .lienzo{padding:8px; gap:6px}
-  .ventana{min-width:0; flex:1 1 100%; max-width:none}
+  .lomo{flex-basis:38px}
+}
+
+@media(max-width:760px){
+  .ventana{min-width:0; flex:1 1 0; max-width:none}
+  .cab-paciente{gap:10px}
   .lomo{flex-basis:38px}
   .lomo:hover{flex-basis:38px}
   .cuerpo{padding:14px 15px 26px}
@@ -4880,8 +4896,22 @@ function guardar(rama, id, dato) {
     .then(() => true)
     .catch(e => {
       console.error('No se pudo sincronizar:', e);
-      avisar('Se guardó en este dispositivo pero no en la nube. ' +
-             'Se reintentará al recuperar la conexión.', 'aviso');
+
+      /* El mensaje anterior decia siempre "se reintentara al recuperar la
+         conexion", y eso solo es cierto cuando el problema ES la conexion.
+         Si el servidor rechazo la escritura por permisos, no se va a
+         reintentar nunca: prometerlo hace que el medico siga trabajando
+         tranquilo mientras nada se guarda. Son dos situaciones distintas y
+         tienen dos salidas distintas. */
+      const permisos = e && (e.code === 'PERMISSION_DENIED' ||
+                             /permission/i.test(e.message || ''));
+      if (permisos) {
+        avisar('No se pudo guardar en el servidor. Es probable que tu sesión ' +
+               'haya vencido: salí y volvé a entrar.', 'error', 12000);
+      } else {
+        avisar('Sin conexión. Se guardó en esta computadora y se va a subir ' +
+               'solo cuando vuelva internet.', 'aviso');
+      }
       return false;
     });
 }
@@ -4938,8 +4968,9 @@ function pintarEstadoConexion() {
   if (!n) return;
   n.className = 'conexion ' + (ESTADO.conectado ? 'ok' : 'sin');
   n.title = ESTADO.conectado
-    ? 'Sincronizado con la nube'
-    : 'Sin conexión. Los cambios se guardan en este dispositivo y se suben al reconectar.';
+    ? 'Sincronizado: lo que escribís se guarda también en el servidor'
+    : 'Sin internet. Lo que escribís se guarda en esta computadora y se sube solo ' +
+      'cuando vuelva la conexión.';
 }
 
 /* ------------------------------------------------------- modelo paciente */
@@ -6463,23 +6494,42 @@ function opciones(nodo, lista, seleccion, alCambiar, multiple) {
   const cont = document.createElement('div');
   cont.className = 'opciones';
   const sel = new Set(multiple ? (seleccion || []) : (seleccion != null ? [seleccion] : []));
-  for (const o of lista) {
-    const valor = o.v !== undefined ? o.v : o;
-    const texto = o.t !== undefined ? o.t : o;
-    const b = document.createElement('div');
-    b.className = 'op' + (sel.has(valor) ? ' on' : '') +
-                  (o.clase ? ' ' + o.clase : '');
-    b.textContent = texto;
-    b.onclick = () => {
-      if (multiple) {
-        sel.has(valor) ? sel.delete(valor) : sel.add(valor);
-        alCambiar([...sel]);
-      } else {
-        alCambiar(sel.has(valor) ? null : valor);
-      }
-    };
-    cont.appendChild(b);
+
+  /* El grupo se repinta A SI MISMO al tocarlo.
+
+     Antes solo avisaba hacia afuera y daba por sentado que quien lo usaba iba
+     a redibujar la pantalla. Donde eso no pasaba —los descriptores del dolor,
+     entre otros— el dato se guardaba bien pero la opcion no se marcaba: el
+     paciente tocaba "Quemante", no veia ningun cambio, y volvia a tocar, con
+     lo cual la desmarcaba. Peor que no funcionar: funcionaba al reves de lo
+     que se veia. */
+  function pintar() {
+    cont.innerHTML = '';
+    for (const o of lista) {
+      const valor = o.v !== undefined ? o.v : o;
+      const texto = o.t !== undefined ? o.t : o;
+      const b = document.createElement('div');
+      b.className = 'op' + (sel.has(valor) ? ' on' : '') +
+                    (o.clase ? ' ' + o.clase : '');
+      b.textContent = texto;
+      b.onclick = () => {
+        if (multiple) {
+          sel.has(valor) ? sel.delete(valor) : sel.add(valor);
+          pintar();
+          alCambiar([...sel]);
+        } else {
+          const nuevo = sel.has(valor) ? null : valor;
+          sel.clear();
+          if (nuevo != null) sel.add(nuevo);
+          pintar();
+          alCambiar(nuevo);
+        }
+      };
+      cont.appendChild(b);
+    }
   }
+  pintar();
+
   nodo.appendChild(cont);
   return cont;
 }
@@ -6488,18 +6538,34 @@ function opciones(nodo, lista, seleccion, alCambiar, multiple) {
 function escalaNRS(nodo, valor, alCambiar, etiquetas) {
   const cont = document.createElement('div');
   cont.className = 'nrs';
-  for (let i = 0; i <= 10; i++) {
-    const n = document.createElement('div');
-    n.className = 'n' + (valor === i ? ' on' : '');
-    n.textContent = i;
-    if (valor === i) {
-      const c = colorDolor(i);
-      n.style.background = i === 0 ? 'var(--verde)' : c.color;
-      n.style.color = i >= 3 && i <= 6 ? '#3a2c00' : '#fff';
+
+  /* La escala se repinta A SI MISMA. Antes avisaba hacia afuera y quien la
+     usaba rehacia la pantalla entera, con lo cual el paciente elegia un
+     numero y la pagina lo devolvia al principio: tenia que volver a bajar con
+     el dedo por cada una de las cuatro intensidades. */
+  let actual = valor;
+
+  function pintar() {
+    cont.innerHTML = '';
+    for (let i = 0; i <= 10; i++) {
+      const n = document.createElement('div');
+      n.className = 'n' + (actual === i ? ' on' : '');
+      n.textContent = i;
+      if (actual === i) {
+        const c = colorDolor(i);
+        n.style.background = i === 0 ? 'var(--verde)' : c.color;
+        n.style.color = i >= 3 && i <= 6 ? '#3a2c00' : '#fff';
+      }
+      n.onclick = () => {
+        actual = (actual === i) ? null : i;
+        pintar();
+        alCambiar(actual);
+      };
+      cont.appendChild(n);
     }
-    n.onclick = () => alCambiar(valor === i ? null : i);
-    cont.appendChild(n);
   }
+  pintar();
+
   nodo.appendChild(cont);
   const pie = document.createElement('div');
   pie.className = 'nrs-pie';
@@ -6941,12 +7007,32 @@ function vigilarSesion() {
     /* Estar logueado NO alcanza: hay que figurar en el equipo. Se consulta el
        propio registro, que es lo unico que las reglas dejan leer a alguien
        que todavia no es miembro. */
-    fbDb.ref('dolor/equipo/' + u.uid).once('value')
+    /* Mientras una cuenta se esta creando NO hay que mirar el equipo: Firebase
+       inicia la sesion en cuanto nace la cuenta, y eso ocurre unos
+       milisegundos ANTES de que se escriba el registro del miembro. Sin esta
+       espera, cada persona recien invitada aterrizaba en "tu cuenta no
+       pertenece a este consultorio" la primera vez que entraba. */
+    if (window.REGISTRANDO) return;
+
+    leerMiembro(u.uid, 3);
+  });
+}
+
+/* Lee el registro del miembro y, si no aparece, reintenta un par de veces
+   antes de dar por hecho que no pertenece al equipo. La red tarda, y decirle
+   a alguien que no tiene acceso cuando en realidad si lo tiene es de las
+   cosas que mas confunden. */
+function leerMiembro(uid, intentos) {
+  fbDb.ref('dolor/equipo/' + uid).once('value')
       .then(s => {
         const m = s.val();
-        if (!m) { pantallaSinAcceso(); return; }
+        if (!m) {
+          if (intentos > 0) { setTimeout(() => leerMiembro(uid, intentos - 1), 900); return; }
+          pantallaSinAcceso(); return;
+        }
         ESTADO.usuario.rol = m.rol;
         ESTADO.usuario.nombre = m.nombre;
+        marcarInstalado(m);
         iniciarAplicacion();
       })
       .catch(() => {
@@ -6954,12 +7040,11 @@ function vigilarSesion() {
            estan publicadas o no hay conexion. Se dice cual de las dos. */
         if (ESTADO.conectado === false) {
           avisar('Sin conexión. Reintentando…', 'aviso');
-          setTimeout(() => vigilarSesion(), 3000);
+          setTimeout(() => leerMiembro(uid, intentos), 3000);
         } else {
           pantallaSinAcceso();
         }
       });
-  });
 }
 
 
@@ -7236,16 +7321,35 @@ function consultarInstalado() {
     .catch(() => true);   /* ante la duda, se exige codigo */
 }
 
+/* La marca de instalado se escribe al crear la primera cuenta. Pero los
+   consultorios que ya tenian titular ANTES de que existiera esa marca se
+   quedaron sin ella, y entonces la pantalla de registro seguia ofreciendo el
+   alta de titular a cualquiera. Se repara sola: cuando entra un titular y la
+   marca no esta, se pone. Una vez, en silencio, y no vuelve a pasar. */
+function marcarInstalado(miembro) {
+  if (!fbDb || !miembro || miembro.rol !== 'titular') return;
+  fbDb.ref('dolor/publico/instalado').once('value')
+    .then(s => { if (s.val() !== true) return fbDb.ref('dolor/publico/instalado').set(true); })
+    .catch(() => {});
+}
+
+/* La pantalla de registro pide SIEMPRE el codigo de invitacion, y solo ofrece
+   el alta de titular cuando alguien la pide expresamente.
+
+   Antes era al reves: consultaba la marca de instalado y, si no estaba,
+   ofrecia el alta de titular. El problema es que "la marca no esta" no
+   significa "no hay titular": significa que no se pudo leer, o que se
+   escribio con una version anterior, o que las reglas la bloquean. Frente a
+   la duda, la pantalla se comportaba de la manera mas permisiva, que es
+   justo la que no corresponde.
+
+   Ahora la duda se resuelve al reves y quien manda es la base: si alguien
+   fuerza el alta de titular con un titular ya existente, las reglas la
+   rechazan y se le dice por que. */
 function pantallaRegistro() {
   const c = $('#entrada');
   if (!c) return;
-  c.innerHTML =
-    '<div style="text-align:center;padding:10px 0 18px">' +
-    '<div style="font-size:20px;font-weight:700;letter-spacing:.07em">' + esc(MARCA.nombre) + '</div>' +
-    '<div class="nota">Crear mi cuenta</div></div>' +
-    '<p class="nota">Verificando…</p>';
-
-  consultarInstalado().then(instalado => dibujarRegistro(c, instalado));
+  dibujarRegistro(c, true);
 }
 
 function dibujarRegistro(c, instalado) {
@@ -7259,14 +7363,16 @@ function dibujarRegistro(c, instalado) {
   c.appendChild(superficie('◀ Volver', null, pantallaEntrada, 'fina'));
 
   const d = {email:'', clave:'', clave2:'', codigo:'', nombre:''};
-  const equipoVacio = !instalado;
+  const equipoVacio = !instalado;   // true solo si se pidio el alta de titular
 
   if (equipoVacio) {
     c.insertAdjacentHTML('beforeend',
-      '<div class="alerta medio"><b>Todavía no hay ninguna cuenta</b>' +
-      '<p>La primera que se cree queda como <b>titular</b>, con acceso completo y con la ' +
-      'facultad de invitar al resto. Creala <b>ahora</b>, no dentro de unos días: hasta que ' +
-      'exista, esta pantalla está abierta para cualquiera que conozca la dirección.</p></div>');
+      '<div class="alerta medio"><b>Alta de titular</b>' +
+      '<p>Esto solo funciona si el consultorio <b>todavía no tiene ninguna cuenta</b>. ' +
+      'Si ya hay un titular, la base va a rechazar el alta y hay que pedirle un código ' +
+      'de invitación.</p></div>');
+    c.appendChild(superficie('Tengo un código de invitación', null,
+      () => dibujarRegistro(c, true), 'fina'));
   } else {
     campo(c, 'Código de invitación', d, 'codigo',
       {pista:'XXXX-XXXX-XXXX-XXXX',
@@ -7300,6 +7406,10 @@ function dibujarRegistro(c, instalado) {
                         invitacion.email + '). Registrate con ese.', 'error');
       }
 
+      /* Se marca que hay un alta en curso para que la vigilancia de sesion no
+         mire el equipo antes de que el registro exista. Ver ui-auth.js. */
+      window.REGISTRANDO = true;
+
       fbAuth.createUserWithEmailAndPassword(email, d.clave)
         .then(cred => {
           const uid = cred.user.uid;
@@ -7322,9 +7432,14 @@ function dibujarRegistro(c, instalado) {
               avisar(equipoVacio
                 ? 'Cuenta de titular creada. Ya podés invitar al resto desde Ajustes → Equipo.'
                 : 'Cuenta creada. Bienvenido.', 'ok', 8000);
+              /* Recien ahora el registro existe: se libera la vigilancia y se
+                 la vuelve a disparar para que entre con el rol ya cargado. */
+              window.REGISTRANDO = false;
+              vigilarSesion();
             });
         })
         .catch(e => {
+          window.REGISTRANDO = false;
           const m = {
             'auth/email-already-in-use':'Ya existe una cuenta con ese correo. Probá entrar, ' +
               'o usá «Olvidé mi contraseña».',
@@ -7333,10 +7448,19 @@ function dibujarRegistro(c, instalado) {
             'auth/operation-not-allowed':'El registro por correo no está habilitado en ' +
               'Firebase. Hay que activarlo en Authentication → Sign-in method.',
             'auth/network-request-failed':'Sin conexión a internet.',
-            'PERMISSION_DENIED':'La base rechazó el alta. Revisá que las reglas de ' +
-              'reglas-firebase.txt estén publicadas.'
+            'PERMISSION_DENIED': equipoVacio
+              ? 'La base rechazó el alta de titular: este consultorio YA tiene una cuenta. ' +
+                'Pedile al titular un código de invitación.'
+              : 'La base rechazó el alta. Puede ser que el código ya se haya usado, que ' +
+                'sea para otro correo, o que las reglas de reglas-firebase.txt no estén ' +
+                'publicadas.'
           }[e.code] || e.message;
           avisar(m, 'error', 9000);
+          /* Si la cuenta de Firebase llego a crearse pero el alta en el equipo
+             fallo, queda una cuenta que existe y no sirve para nada. Se cierra
+             la sesion para que el proximo intento arranque limpio y no quede
+             la persona en la pantalla de "no pertenecés". */
+          if (fbAuth.currentUser) fbAuth.signOut().catch(() => {});
         });
     };
 
@@ -7346,7 +7470,18 @@ function dibujarRegistro(c, instalado) {
       .catch(() => avisar('No se pudo verificar el código. ¿Hay internet?', 'error'));
   }, 'acento'));
 
-  c.appendChild(superficie('◀ Volver a entrar con mi cuenta', null, pantallaEntrada, 'fina'));
+  /* La salida esta arriba y no se repite: dos superficies que hacen lo mismo
+     en la misma pantalla obligan a leer las dos para descubrir que no habia
+     que elegir nada. */
+  if (!equipoVacio) {
+    c.insertAdjacentHTML('beforeend',
+      '<p class="nota" style="margin-top:16px;padding-top:12px;' +
+      'border-top:1px solid var(--linea)">¿Sos el titular y el consultorio todavía no ' +
+      'tiene ninguna cuenta? Esa primera cuenta se crea sin código.</p>');
+    c.appendChild(superficie('Crear la cuenta de titular',
+      'Solo la primera vez, cuando no hay ninguna otra cuenta',
+      () => dibujarRegistro(c, false), 'fina'));
+  }
 }
 
 /* Pantalla que ve alguien que tiene cuenta pero no pertenece al equipo.
@@ -8342,7 +8477,7 @@ function ventanaDolor(id) {
       {k:'nrsPeor', t:'En el peor momento'}, {k:'nrsMejor', t:'En el mejor momento'}]) {
       const cc = document.createElement('div'); cc.className = 'campo';
       cc.innerHTML = '<label>' + esc(e.t) + '</label>'; c.appendChild(cc);
-      escalaNRS(cc, d[e.k], v => { d[e.k] = v; g(); refrescar(); });
+      escalaNRS(cc, d[e.k], v => { d[e.k] = v; g(); });
     }
 
     const cp = document.createElement('div'); cp.className = 'campo';
@@ -10513,6 +10648,11 @@ function ventanaAjustes() {
       dato('Versión', window.ALGOS_BUILD || '—')));
 
     if (firebaseConfigurado()) {
+      c.appendChild(superficie('Diagnóstico de conexión',
+        'Si algo no se guarda, esto dice exactamente por qué', ventanaRevision, 'fina'));
+    }
+
+    if (firebaseConfigurado()) {
       c.insertAdjacentHTML('beforeend',
         '<h3 style="font-size:13px;text-transform:uppercase;letter-spacing:.05em;' +
         'color:var(--tinta-3);margin:18px 0 8px">Equipo</h3>');
@@ -10749,6 +10889,141 @@ function imprimirHistoria(id) {
   L.push('Firma y sello del médico tratante');
 
   imprimirTexto('Historia clínica de dolor — ' + nombreCompleto(p), L.join('\n'));
+}
+
+
+/* =========================================================================
+   DIAGNOSTICO DE CONEXION
+   -------------------------------------------------------------------------
+   "Se guardo en este dispositivo pero no en la nube" es un sintoma, no un
+   diagnostico: puede ser falta de internet, una sesion vencida, unas reglas
+   mal publicadas o una cuenta que no figura en el equipo. Las cuatro se ven
+   iguales desde afuera y tienen soluciones distintas.
+
+   Esta ventana prueba de verdad: lee y escribe en cada rama y dice cual
+   falla y que hacer. Es lo que evita el "no anda" sin mas informacion.
+   ========================================================================= */
+
+function ventanaRevision() {
+  abrir({id:'revision', titulo:'Diagnóstico de conexión',
+    sub:'Prueba real de lectura y escritura', ancha:true, dibujar(c) {
+
+      if (!firebaseConfigurado()) {
+        c.innerHTML = vacio('La aplicación está en modo local',
+          'No hay nada que diagnosticar: los datos viven solo en este dispositivo. ' +
+          'Para sincronizar hay que configurar Firebase (PUBLICAR.md, pasos 2 a 4).');
+        return;
+      }
+
+      const u = ESTADO.usuario || {};
+      const yo = miembroActual();
+
+      c.insertAdjacentHTML('beforeend', bloque('Quién sos para el servidor',
+        dato('Sesión', u.uid ? marca('iniciada', 'verde') : marca('sin sesión', 'rojo')) +
+        dato('Correo', esc(u.email || '—')) +
+        dato('Identificador (uid)', '<span class="mono" style="font-size:11.5px">' +
+          esc(u.uid || '—') + '</span>') +
+        dato('Figurás en el equipo', yo
+          ? marca('sí, como ' + ((ROLES[yo.rol] || {}).nombre || yo.rol), 'verde')
+          : marca('NO — esto explica cualquier fallo de guardado', 'rojo')) +
+        dato('Canal con el servidor', ESTADO.conectado
+          ? marca('abierto', 'verde') : marca('cerrado', 'ambar') +
+            '<div class="nota">El canal abierto no garantiza que puedas escribir: ' +
+            'eso lo deciden las reglas.</div>')));
+
+      const salida = document.createElement('div');
+      c.appendChild(salida);
+
+      c.appendChild(superficie('Probar ahora',
+        'Escribe y borra un dato de prueba en cada rama', () => correr(), 'acento'));
+
+      function correr() {
+        salida.innerHTML = '<div class="bloque"><h3>Probando…</h3></div>';
+        const marcaTiempo = 'prueba_' + Date.now();
+
+        /* Se prueban las ramas que la aplicacion usa de verdad. El dato de
+           prueba se borra enseguida: no queda basura en la base. */
+        const ramas = [
+          {r:'pacientes',    que:'las historias clínicas'},
+          {r:'precargas',    que:'los cuestionarios del portal'},
+          {r:'agenda',       que:'la agenda'},
+          {r:'equipo',       que:'el equipo'},
+          {r:'invitaciones', que:'las invitaciones'},
+          {r:'config',       que:'la configuración'}
+        ];
+
+        const pruebas = ramas.map(x =>
+          fbDb.ref('dolor/' + x.r).limitToFirst(1).once('value')
+            .then(() => ({...x, lectura:'ok'}))
+            .catch(e => ({...x, lectura:'falla', errorL:e.code || e.message}))
+            .then(res =>
+              fbDb.ref('dolor/' + x.r + '/' + marcaTiempo).set({prueba:true})
+                .then(() => fbDb.ref('dolor/' + x.r + '/' + marcaTiempo).remove())
+                .then(() => ({...res, escritura:'ok'}))
+                .catch(e => ({...res, escritura:'falla', errorE:e.code || e.message})))
+        );
+
+        /* Y la rama publica, que tiene que leerse SIN sesion. */
+        pruebas.push(
+          fbDb.ref('dolor/publico/instalado').once('value')
+            .then(s => ({r:'publico/instalado', que:'la marca de instalado',
+                         lectura:'ok', escritura:'—', valor:String(s.val())}))
+            .catch(e => ({r:'publico/instalado', que:'la marca de instalado',
+                          lectura:'falla', errorL:e.code || e.message, escritura:'—'})));
+
+        Promise.all(pruebas).then(res => {
+          const fallan = res.filter(x => x.lectura === 'falla' || x.escritura === 'falla');
+
+          let h = '<div class="bloque"><h3>Resultado</h3>';
+          for (const x of res) {
+            const okL = x.lectura === 'ok', okE = x.escritura !== 'falla';
+            h += '<div style="padding:8px 0;border-bottom:1px solid var(--linea)">' +
+                 '<b style="font-size:14px">' + esc(x.que) + '</b> ' +
+                 marca('leer: ' + (okL ? 'sí' : 'no'), okL ? 'verde' : 'rojo') + ' ' +
+                 (x.escritura === '—' ? ''
+                    : marca('escribir: ' + (okE ? 'sí' : 'no'), okE ? 'verde' : 'rojo')) +
+                 (x.valor !== undefined ? ' <span class="nota">valor: ' + esc(x.valor) + '</span>' : '') +
+                 ((x.errorL || x.errorE)
+                    ? '<div class="nota mono" style="margin-top:3px">' +
+                      esc([x.errorL, x.errorE].filter(Boolean).join(' · ')) + '</div>' : '') +
+                 '</div>';
+          }
+          h += '</div>';
+          salida.innerHTML = h;
+
+          /* La interpretacion, que es lo que de verdad hace falta. */
+          let conclusion;
+          if (!fallan.length) {
+            conclusion = '<div class="alerta info"><b>Todo funciona</b>' +
+              '<p>Se pudo leer y escribir en todas las ramas. Si igual ves el aviso ' +
+              'amarillo, lo más probable es que el navegador tenga guardada una versión ' +
+              'vieja de la aplicación: recargá con <b>Cmd+Shift+R</b>.</p></div>';
+          } else if (!ESTADO.usuario || !ESTADO.usuario.uid) {
+            conclusion = '<div class="alerta alto"><b>No hay sesión iniciada</b>' +
+              '<p>Sin sesión no se puede escribir nada. Salí y volvé a entrar.</p></div>';
+          } else if (!yo) {
+            conclusion = '<div class="alerta alto"><b>Tu cuenta no figura en el equipo</b>' +
+              '<p>Tenés sesión, pero las reglas exigen estar en la lista del equipo y tu ' +
+              'identificador no está. Nada de lo que escribas se va a guardar en el ' +
+              'servidor. Hay que agregar tu cuenta al equipo.</p></div>';
+          } else if (fallan.every(x => /permission/i.test((x.errorE || x.errorL || '')))) {
+            conclusion = '<div class="alerta alto"><b>El servidor rechaza por permisos</b>' +
+              '<p>La sesión está bien y figurás en el equipo, así que el problema está en ' +
+              'las <b>reglas</b> de la base: o no se publicaron, o se publicó una versión ' +
+              'incompleta. Volvé a pegar el contenido de <span class="mono">' +
+              'reglas-firebase.txt</span> completo, desde la primera llave hasta la ' +
+              'última, y tocá Publicar.</p>' +
+              '<p class="nota">Ramas que fallan: ' +
+              esc(fallan.map(x => x.que).join(', ')) + '</p></div>';
+          } else {
+            conclusion = '<div class="alerta medio"><b>Falla intermitente</b>' +
+              '<p>Algunas ramas respondieron y otras no, y el error no es de permisos. ' +
+              'Suele ser la conexión. Probá de nuevo en un minuto.</p></div>';
+          }
+          salida.insertAdjacentHTML('beforeend', conclusion);
+        });
+      }
+    }});
 }
 
 /* ================ demo.js ================ */
@@ -11685,34 +11960,58 @@ function crearPrecarga(dni, email, turno) {
   p.datos.dni = dni;
   p.datos.email = email;
 
-  guardar('precargas', token, p).then(() => {
+  pantallaPortal('Enviando…', '<p class="nota">Un momento.</p>');
+
+  /* El enlace NO se muestra en pantalla, ni siquiera cuando el envio falla.
+     Todo el sentido de mandarlo por correo es que llegue a la casilla que la
+     persona declaro: si ademas se lo mostraramos acá, cualquiera podria poner
+     el DNI de otro y entrar igual, y el correo dejaria de probar nada.
+
+     Por eso tampoco hay un boton de "empezar ahora": la unica puerta es el
+     mail. Si el envio falla, se dice que fallo y se lo deriva al consultorio. */
+  guardar('precargas', token, p).then(guardado => {
+    if (!guardado && fbDb) {
+      pantallaPortal('No pudimos registrar su solicitud',
+        '<p>Hubo un problema al guardar sus datos y no podemos enviarle el enlace.</p>' +
+        '<p class="nota">Por favor, comuníquese con el consultorio' +
+        (MARCA.telefono && MARCA.telefono !== '-' ? ' al <b>' + esc(MARCA.telefono) + '</b>' : '') +
+        (MARCA.whatsapp ? ' o por WhatsApp' : '') +
+        '. También puede completar el cuestionario en papel el día de la consulta.</p>');
+      return;
+    }
+
     const enlace = location.origin + location.pathname + '#c=' + token;
     enviarEnlacePorMail(email, enlace, dni).then(ok => {
-      const cont = $('#portal');
-      cont.innerHTML = '';
-      cont.insertAdjacentHTML('beforeend', cabezaPortal());
-      const v = document.createElement('section');
-      v.className = 'ventana';
-      v.innerHTML = '<header><div><h2>' +
-        (ok ? 'Le enviamos el enlace' : 'Su enlace está listo') +
-        '</h2></div></header><div class="cuerpo"></div>';
-      const c = $('.cuerpo', v);
-      c.insertAdjacentHTML('beforeend', ok
-        ? '<p>Revisá tu casilla <b>' + esc(email) + '</b>. Si no lo ves en unos minutos, ' +
-          'mirá en la carpeta de correo no deseado.</p>' +
-          '<p class="nota">Guardá ese mail: es el que te deja seguir completando el ' +
-          'cuestionario en otro momento.</p>'
-        : '<p>No pudimos enviar el correo en este momento. Usá este enlace y ' +
-          '<b>guardalo</b>: es el único que te va a permitir volver.</p>');
-      c.insertAdjacentHTML('beforeend',
-        '<div class="bloque"><h3>Su enlace</h3><p class="mono" style="word-break:break-all">' +
-        esc(enlace) + '</p></div>');
-      c.appendChild(superficie('Empezar ahora', 'Podés completarlo en varias veces', () => {
-        location.hash = 'c=' + token; location.reload();
-      }, 'acento'));
-      cont.appendChild(v);
+      if (ok) {
+        pantallaPortal('Le enviamos el enlace',
+          '<p>Revise su casilla <b>' + esc(email) + '</b>. Si no lo ve en unos minutos, ' +
+          'mire en la carpeta de correo no deseado.</p>' +
+          '<p><b>Guarde ese correo.</b> Ese enlace es el único que le permite entrar y ' +
+          'volver a entrar para seguir completando el cuestionario en otro momento.</p>' +
+          '<p class="nota">Ya puede cerrar esta página.</p>');
+      } else {
+        pantallaPortal('No pudimos enviarle el correo',
+          '<p>Sus datos quedaron registrados, pero el correo no pudo salir en este momento.</p>' +
+          '<p class="nota">Por favor, comuníquese con el consultorio' +
+          (MARCA.telefono && MARCA.telefono !== '-' ? ' al <b>' + esc(MARCA.telefono) + '</b>' : '') +
+          ' para que le reenvíen el enlace, o complete el cuestionario en papel el día ' +
+          'de la consulta.</p>');
+      }
     });
   });
+}
+
+/* Pantalla simple del portal: un titulo y un texto, sin nada mas que tocar.
+   Se usa para todos los finales de camino. */
+function pantallaPortal(titulo, cuerpoHTML) {
+  const cont = $('#portal');
+  cont.innerHTML = cabezaPortal();
+  const v = document.createElement('section');
+  v.className = 'ventana';
+  v.innerHTML = '<header><div><h2>' + esc(titulo) + '</h2></div></header>' +
+                '<div class="cuerpo">' + cuerpoHTML + '</div>';
+  cont.appendChild(v);
+  window.scrollTo(0, 0);
 }
 
 /* ------------------------------------------------- cargar y completar --- */
@@ -11742,11 +12041,14 @@ function cargarCuestionario(token) {
 
   const seguir = p => {
     if (!p) {
-      cont.innerHTML = '<div class="portal-cabeza"><b>' + esc(MARCA.nombre) + '</b></div>' +
-        '<section class="ventana"><header><div><h2>Enlace no encontrado</h2></div></header>' +
-        '<div class="cuerpo"><p>Este enlace no corresponde a ningún cuestionario. ' +
-        'Puede que esté incompleto: copialo entero desde el correo, incluida la parte ' +
-        'que va después del signo numeral.</p></div></section>';
+      pantallaPortal('No encontramos su cuestionario',
+        '<p>Este enlace no corresponde a ningún cuestionario.</p>' +
+        '<p class="nota">Lo más común es que se haya copiado cortado. El enlace es ' +
+        'largo y termina con una tira de letras y números después del signo <b>#</b>. ' +
+        'Volvé al correo y tocá directamente el botón, en vez de copiar y pegar.</p>' +
+        '<p class="nota">Si el problema sigue, comuniquese con el consultorio' +
+        (MARCA.telefono && MARCA.telefono !== '-' ? ' al ' + esc(MARCA.telefono) : '') +
+        ' para que le reenvíen el enlace.</p>');
       return;
     }
     if (p.estado === 'enviado' || p.estado === 'tomado') { pantallaYaEnviado(p); return; }
@@ -11756,13 +12058,24 @@ function cargarCuestionario(token) {
     pintarPaso();
   };
 
+  /* Si no se puede LEER, no es lo mismo que no exista: decir "no encontrado"
+     ante un problema de conexion hace que el paciente tire el enlace a la
+     basura creyendo que no sirve. Se distinguen los dos casos. */
+  const noSePudoLeer = e => {
+    console.error('Lectura de la precarga:', e);
+    pantallaPortal('No pudimos abrir su cuestionario',
+      '<p>El enlace es correcto, pero no pudimos conectarnos para abrirlo.</p>' +
+      '<p class="nota"><b>No borre el correo.</b> Vuelva a intentarlo en unos minutos, ' +
+      'o desde otra conexión.</p>');
+  };
+
   const local = ESTADO.precargas[token];
   if (local) return seguir(local);
-  if (fbDb) {
-    fbDb.ref('dolor/precargas/' + token).once('value')
-      .then(s => seguir(s.val()))
-      .catch(() => seguir(null));
-  } else seguir(null);
+
+  if (!fbDb) return seguir(null);
+  fbDb.ref('dolor/precargas/' + token).once('value')
+    .then(s => seguir(s.val()))
+    .catch(noSePudoLeer);
 }
 
 function guardarPrecarga() {
@@ -11879,7 +12192,7 @@ function pasoDolor(c, d) {
     const cc = document.createElement('div'); cc.className = 'campo';
     cc.innerHTML = '<label>' + esc(e.t) + '</label>';
     c.appendChild(cc);
-    escalaNRS(cc, d[e.k], v => { d[e.k] = v; guardarPrecarga(); pintarPaso(); });
+    escalaNRS(cc, d[e.k], v => { d[e.k] = v; guardarPrecarga(); });
   }
 
   const cp = document.createElement('div'); cp.className = 'campo';
@@ -12089,18 +12402,14 @@ function enviarCuestionario() {
 }
 
 function pantallaYaEnviado(p) {
-  const cont = $('#portal');
-  cont.innerHTML = cabezaPortal();
-  const v = document.createElement('section');
-  v.className = 'ventana';
-  v.innerHTML = '<header><div><h2>Cuestionario enviado</h2>' +
-    '<div class="sub">' + esc(fechaLarga(p.enviado || p.modificado)) + '</div></div></header>' +
-    '<div class="cuerpo"><p>Listo. El especialista va a tener sus respuestas antes de la consulta.</p>' +
+  pantallaPortal('Cuestionario enviado',
+    '<p class="nota" style="margin-bottom:12px">' +
+    esc(fechaLarga(p.enviado || p.modificado)) + '</p>' +
+    '<p>Listo. El especialista va a tener sus respuestas antes de la consulta.</p>' +
     '<p class="nota">Si necesita corregir algo, avísele el día del turno: desde acá ya no ' +
-    'se puede modificar, justamente para que lo que él ve sea exactamente lo que usted envió.</p>' +
-    (p.turno ? '<div class="bloque"><h3>Su turno</h3><p>' + esc(fechaLarga(p.turno)) + '</p></div>' : '') +
-    '</div>';
-  cont.appendChild(v);
+    'se puede modificar, justamente para que lo que ve el especialista sea exactamente lo ' +
+    'que usted envió.</p>' +
+    (p.turno ? '<div class="bloque"><h3>Su turno</h3><p>' + esc(fechaLarga(p.turno)) + '</p></div>' : ''));
 }
 
 /* -------------------------------------------------------------------------
