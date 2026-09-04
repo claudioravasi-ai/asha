@@ -14,7 +14,7 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icons/icon-192.png">
 <link rel="apple-touch-icon" href="icons/icon-192.png">
-<script>window.ALGOS_BUILD = "2026.09.04.1544";</script>
+<script>window.ALGOS_BUILD = "2026.09.04.1558";</script>
 <style>
 /* ==== styles.css ==== */
 /* =========================================================================
@@ -521,7 +521,7 @@ body.portal{overflow:auto; background:var(--lienzo)}
       <b id="marcaNombre">ASHA</b><span id="marcaFirma">by Dra. Marcela Pevere</span><span id="marcaBajada">Unidad de Dolor Agudo y Crónico</span>
     </div>
     <div class="espacio"></div>
-    <span class="version-barra" id="versionBarra">2026.09.04.1544</span>
+    <span class="version-barra" id="versionBarra">2026.09.04.1558</span>
     <div class="conexion" id="conexion" title="Estado de sincronización"></div>
     <div class="usuario" id="usuario" title="Tu cuenta"></div>
   </div>
@@ -5835,8 +5835,12 @@ function sugerirPlan(sindromeId, p, c) {
   const s = SINDROMES.find(x => x.id === sindromeId);
   if (!s) return null;
 
-  const renalGrave = c.ante.has('renal') ||
-    (p.antecedentes && Number(p.antecedentes.filtrado) > 0 && Number(p.antecedentes.filtrado) < 30);
+  const filtrado = p.antecedentes ? Number(p.antecedentes.filtrado) : 0;
+  const renalGrave = c.ante.has('renal') || (filtrado > 0 && filtrado < 30);
+  /* El deterioro MODERADO tambien obliga a ajustar varios farmacos. Antes solo
+     lo avisaba el panel de seguridad y el plan sugerido no decia nada, asi que
+     el mismo dato producia dos respuestas distintas segun donde se mirara. */
+  const renalModerada = !renalGrave && filtrado >= 30 && filtrado < 60;
   const hepatica = c.ante.has('hepatica');
   const mayor = c.edad >= 65;
   const embarazo = c.ante.has('embarazo');
@@ -5850,6 +5854,8 @@ function sugerirPlan(sindromeId, p, c) {
     if (renalGrave) {
       if (/contraindicad/i.test(f.ajusteRenal || '')) reparos.push('CONTRAINDICADO con este filtrado renal');
       else if (/imprescindible|reducir|ajustar/i.test(f.ajusteRenal || '')) reparos.push('Requiere ajuste renal: ' + f.ajusteRenal);
+    } else if (renalModerada && /imprescindible|reducir|ajustar/i.test(f.ajusteRenal || '')) {
+      reparos.push('Filtrado ' + filtrado + ' ml/min: ajustar la dosis. ' + f.ajusteRenal);
     }
     if (hepatica && /contraindicad|evitar/i.test(f.ajusteHepatico || ''))
       reparos.push('Evitar por hepatopatía');
@@ -6032,7 +6038,13 @@ function efectividadPaciente(p) {
     etiqueta:'Función', detalle:detalleFuncion};
 
   /* --- 3. impresión del paciente -------------------------------------- */
-  const pgic = ultimaEscala(p, 'pgic');
+  /* Se busca en TODO el historial y no solo en el valor vigente: si un PGIC
+     quedo anotado en un control y por lo que sea no se espejo al registro
+     principal, este dominio —que pesa un 20%— desaparecia del calculo sin
+     que nadie se enterara. */
+  const histPgic = historialEscala(p, 'pgic');
+  const pgic = histPgic.length ? histPgic[histPgic.length - 1].total
+                               : ultimaEscala(p, 'pgic');
   if (pgic == null) r.faltan.push('la impresión global de cambio del paciente (PGIC)');
   else {
     /* 4 es "sin cambios" y es el cero de la escala; 7 es el máximo. */
@@ -6398,6 +6410,17 @@ function reemplazar(def) {
    el lugar donde estaba escribiendo. */
 function refrescarVentanaActiva() {
   if (!PILA.length) return;
+
+  /* Algunas ventanas NO se pueden redibujar mientras trabajan.
+
+     El diagnostico de conexion escribe un dato de prueba en cada rama. Esa
+     escritura despierta al oyente de Firebase, que llama aca, que rehace la
+     ventana entera... y borra el resultado que el diagnostico estaba
+     escribiendo. Peor: al rehacerla, el diagnostico vuelve a arrancar y a
+     escribir, y se entra en un ciclo que congela la aplicacion.
+
+     Una ventana que se declara asi pide que la dejen en paz hasta terminar. */
+  if (PILA[PILA.length - 1].noRefrescar) return;
   const cuerpo = $('#pila .ventana:last-child .cuerpo');
   if (!cuerpo) { pintarPila(); return; }
   const y = cuerpo.scrollTop;
@@ -7652,7 +7675,7 @@ function ventanaInicio() {
         c.appendChild(av);
       }
 
-      if (conBandera.length) {
+      if (conBandera.length && puede('clinica')) {
         c.insertAdjacentHTML('beforeend',
           '<div class="alerta urgente"><b>' + conBandera.length + ' paciente' +
           (conBandera.length === 1 ? '' : 's') + ' con bandera roja sin revisar</b>' +
@@ -7674,14 +7697,22 @@ function ventanaInicio() {
       teja(m, activos.length, 'En seguimiento',
         'Con control programado a futuro', () => ventanaPacientes('seguimiento'));
 
-      teja(m, agudos.length, 'Dolor agudo',
-        'Interconsultas y postoperatorios en curso', ventanaAgudo);
+      if (puede('clinica')) {
+        teja(m, agudos.length, 'Dolor agudo',
+          'Interconsultas y postoperatorios en curso', ventanaAgudo);
+      }
 
-      teja(m, '', 'Estadísticas',
-        'Efectividad, diagnósticos y carga opioide del consultorio', ventanaEstadisticas);
+      /* Lo clinico solo para quien tiene acceso clinico. Sin esto los roles
+         serian decorativos: la ficha del rol de secretaria promete que no ve
+         diagnostico ni medicacion, y esa promesa hay que cumplirla en el
+         codigo, no en el texto. */
+      if (puede('clinica')) {
+        teja(m, '', 'Estadísticas',
+          'Efectividad, diagnósticos y carga opioide del consultorio', ventanaEstadisticas);
 
-      teja(m, '', 'Biblioteca',
-        'Síndromes, vademécum, procedimientos y escalas', ventanaBiblioteca);
+        teja(m, '', 'Biblioteca',
+          'Síndromes, vademécum, procedimientos y escalas', ventanaBiblioteca);
+      }
 
       c.insertAdjacentHTML('beforeend', '<div style="height:14px"></div>');
       c.appendChild(superficie('+ Paciente nuevo',
@@ -7774,9 +7805,11 @@ function ventanaPacientes(filtro) {
 function filaPaciente(p) {
   const n = document.createElement('div');
   n.className = 'pac';
-  const ef = efectividadPaciente(p);
-  const dx = (p.diagnostico && p.diagnostico.sindrome) || 'Sin diagnóstico cargado';
-  const nrs = ultimoNRS(p);
+  const clinica = puede('clinica');
+  const ef = clinica ? efectividadPaciente(p) : {porcentaje:null};
+  const dx = clinica ? ((p.diagnostico && p.diagnostico.sindrome) || 'Sin diagnóstico cargado')
+                     : (p.dni ? 'DNI ' + p.dni : '');
+  const nrs = clinica ? ultimoNRS(p) : null;
   const ultima = (p.evoluciones || []).length
     ? p.evoluciones[p.evoluciones.length - 1].fecha : p.creado;
 
@@ -7865,6 +7898,23 @@ function ventanaVerPrecarga(token) {
     sub:'Cuestionario ' + (p.estado === 'enviado' ? 'enviado ' + desdeHace(p.enviado) : 'en borrador'),
     ancha:true,
     dibujar(c) {
+      if (!puede('clinica')) {
+        /* Vista de secretaría: identidad y turno, para agendar y recibir. */
+        c.insertAdjacentHTML('beforeend', bloque('Quién es',
+          dato('Documento', esc(d.dni || p.dni)) +
+          dato('Nacimiento', d.fechaNac ? fechaCorta(d.fechaNac) : '—') +
+          dato('Contacto', esc([d.telefono, d.email || p.email].filter(Boolean).join(' · '))) +
+          dato('Cobertura', esc(d.obraSocial)) +
+          dato('Derivado por', esc(d.derivante)) +
+          dato('Turno', p.turno ? fechaLarga(p.turno) : 'sin turno cargado') +
+          dato('Estado', p.estado === 'enviado' ? marca('completo, listo para la consulta', 'verde')
+                                                : marca('todavía lo está completando', 'ambar'))));
+        c.insertAdjacentHTML('beforeend',
+          '<p class="nota">El contenido clínico del cuestionario lo ve la médica. ' +
+          'Tu rol es Secretaría.</p>');
+        return;
+      }
+
       /* Lo primero, siempre: lo que el paciente marcó como síntoma de alarma. */
       if ((d.banderas || []).length) {
         const nombres = d.banderas.map(b =>
@@ -8163,6 +8213,33 @@ function ventanaHistoria(id) {
       const p = ESTADO.pacientes[ctx.id];
       if (!p) { c.innerHTML = vacio('Paciente no encontrado', 'Puede haber sido borrado desde otro dispositivo.'); return; }
 
+      /* Sin acceso clinico, la historia se reduce a la ficha administrativa:
+         quien es, como ubicarlo y cuando vuelve. Ni diagnostico, ni medicacion,
+         ni evoluciones, ni el motor. */
+      if (!puede('clinica')) {
+        c.insertAdjacentHTML('beforeend',
+          '<div class="bloque"><h2 style="font-size:19px">' + esc(nombreCompleto(p)) + '</h2>' +
+          '<div class="nota">' + esc([p.dni ? 'DNI ' + p.dni : '',
+            edadDe(p.fechaNac) ? edadDe(p.fechaNac) + ' años' : ''].filter(Boolean).join(' · ')) +
+          '</div></div>' +
+          bloque('Ficha administrativa',
+            dato('Documento', esc(p.dni)) +
+            dato('Nacimiento', p.fechaNac ? fechaCorta(p.fechaNac) : '—') +
+            dato('Teléfono', esc(p.telefono)) +
+            dato('Correo', esc(p.email)) +
+            dato('Obra social', esc(p.obraSocial)) +
+            dato('Nº de afiliado', esc(p.afiliado)) +
+            dato('Derivado por', esc(p.derivante)) +
+            dato('Próximo control', p.proximoControl ? fechaCorta(p.proximoControl) : '—')));
+        c.appendChild(superficie('Editar los datos de contacto y cobertura', null,
+          () => ventanaFiliacion(p.id), 'suave'));
+        c.insertAdjacentHTML('beforeend',
+          '<p class="nota" style="margin-top:14px">El contenido clínico de esta historia ' +
+          '—diagnóstico, medicación, evoluciones— lo ve únicamente el personal médico. ' +
+          'Tu rol es Secretaría.</p>');
+        return;
+      }
+
       const a = analizar(p);
       const ef = efectividadPaciente(p);
 
@@ -8436,6 +8513,13 @@ function ventanaFiliacion(id) {
     opciones(cs, [{t:'Femenino',v:'F'},{t:'Masculino',v:'M'},{t:'Otro',v:'X'}], p.sexo,
              v => { p.sexo = v; g(); refrescar(); });
 
+    if (!puede('clinica')) {
+      c.insertAdjacentHTML('beforeend',
+        '<p class="nota" style="margin-top:16px">Los antecedentes médicos y el resto de la ' +
+        'historia los completa el personal médico.</p>');
+      return;
+    }
+
     c.insertAdjacentHTML('beforeend', '<hr style="border:0;border-top:1px solid var(--linea);margin:20px 0">');
 
     const an = p.antecedentes;
@@ -8451,6 +8535,8 @@ function ventanaFiliacion(id) {
     campo(c, 'Filtrado glomerular (ml/min), si se conoce', an, 'filtrado',
       {tipo:'number', alCambiar:g,
        ayuda:'Con este dato la aplicación puede avisar de los ajustes de dosis por función renal.'});
+
+    if (!puede('clinica')) return;   // lo de abajo es clínico
 
     const ce = document.createElement('div'); ce.className = 'campo';
     ce.innerHTML = '<label>Antecedentes que el motor tiene en cuenta</label>' +
@@ -10929,7 +11015,13 @@ function imprimirHistoria(id) {
 
 function ventanaRevision() {
   abrir({id:'revision', titulo:'Diagnóstico de conexión',
-    sub:'Prueba real de lectura y escritura', ancha:true, dibujar(c) {
+    sub:'Prueba real de lectura y escritura', ancha:true,
+    /* Esta ventana escribe en la base, y esa escritura despierta al oyente que
+       redibuja la ventana activa. Sin esta marca la pantalla se rehace sola en
+       medio de la prueba, borra el resultado y vuelve a arrancarla: la
+       aplicacion se cuelga. */
+    noRefrescar: true,
+    dibujar(c) {
 
       if (!firebaseConfigurado()) {
         c.innerHTML = vacio('La aplicación está en modo local',
@@ -10962,20 +11054,11 @@ function ventanaRevision() {
          insertaba encima del boton: empujaba el boton hacia abajo y aparecia
          fuera de donde uno esta mirando, con lo cual parecia que no habia
          pasado nada. */
-      c.appendChild(superficie('Probar de nuevo',
-        'Vuelve a escribir y borrar un dato de prueba en cada rama',
-        () => correr(), 'acento'));
+      c.appendChild(superficie('Probar ahora',
+        'Escribe y borra un dato de prueba en cada rama', () => correr(), 'acento'));
 
       const salida = document.createElement('div');
       c.appendChild(salida);
-
-      /* Corre SOLO al abrir la ventana, sin esperar a que nadie toque nada.
-
-         Un diagnostico que depende de un boton tiene un punto de falla mas: si
-         el boton no responde —o si uno cree que no responde— no hay manera de
-         saber que pasa, que es justo lo contrario de para lo que existe esta
-         pantalla. El boton queda, pero solo para repetir la prueba. */
-      setTimeout(correr, 60);
 
       function correr() {
         console.log('[ASHA] Diagnóstico iniciado', new Date().toISOString());
@@ -10986,7 +11069,9 @@ function ventanaRevision() {
           'Tarda unos segundos. Si en 10 segundos no aparece el resultado, ' +
           'es que el servidor no está contestando.</p></div>';
         salida.scrollIntoView({block:'nearest'});
-        const marcaTiempo = 'prueba_' + Date.now();
+        /* Arranca con guion bajo para distinguirla de un registro real de un
+           vistazo, por si alguna vez quedara una sin borrar. */
+        const marcaTiempo = '_diagnostico_' + Date.now();
 
         /* Se prueban las ramas que la aplicacion usa de verdad. El dato de
            prueba se borra enseguida: no queda basura en la base. */

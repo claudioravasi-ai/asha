@@ -57,6 +57,51 @@ El código sirve **una sola vez** y **solo para ese correo**.
 Desde **Equipo** también se cambia el rol de alguien o se lo quita, con efecto
 inmediato.
 
+### Exactamente qué ve la secretaría
+
+Esto no es una advertencia en un texto: está aplicado en el código y verificado
+pantalla por pantalla.
+
+**En la pantalla de inicio ve tres ventanas** en vez de seis:
+
+| Ve | No ve |
+|----|-------|
+| **Precargados** | ~~Dolor agudo~~ |
+| **Pacientes** | ~~Estadísticas~~ |
+| **En seguimiento** | ~~Biblioteca~~ |
+
+Tampoco le aparece el aviso rojo de pacientes con banderas rojas.
+
+**En la lista de pacientes** ve el apellido, el nombre y el documento. No ve el
+diagnóstico, ni la intensidad del dolor, ni el anillo de efectividad.
+
+**Al abrir un paciente** ve una **ficha administrativa** y nada más:
+
+- Nombre, documento, fecha de nacimiento
+- Teléfono, correo
+- Obra social y número de afiliado
+- Quién lo derivó
+- Próximo control
+
+Puede editar los datos de contacto y cobertura, que es lo que necesita para
+agendar y facturar. Debajo dice, con todas las letras: *«El contenido clínico de
+esta historia —diagnóstico, medicación, evoluciones— lo ve únicamente el
+personal médico.»*
+
+**No accede** a: el diagnóstico, el motor de sugerencias, las banderas rojas, la
+medicación y los equivalentes de morfina, las escalas, el examen físico, el
+mapa del dolor, las evoluciones, la efectividad, el plan, los procedimientos ni
+los consentimientos.
+
+**En un cuestionario del portal** ve quién es, cómo ubicarlo, la cobertura, el
+turno y si el paciente ya lo terminó. No ve el mapa del dolor, ni el DN4, ni las
+respuestas clínicas.
+
+> **Por qué así:** la secretaría necesita agendar, recibir y facturar, y para eso
+> le alcanza con la ficha administrativa. Todo lo demás es secreto médico. La Ley
+> 26.529 no distingue entre "mirar sin querer" y "acceder": si no hace falta para
+> la tarea, no tiene que estar a la vista.
+
 > **Una cuenta por persona, nunca compartida.** En una historia clínica hace
 > falta poder saber quién escribió cada cosa.
 
@@ -69,6 +114,20 @@ equipo**. Una cuenta que no fue invitada no puede leer ni escribir nada.
 
 Si alguien entra con una cuenta que no pertenece al consultorio, la aplicación se
 lo dice y le ofrece cerrar la sesión.
+
+### La versión, siempre a la vista
+
+Al pie de la pantalla de inicio figura la versión y la fecha de la última
+actualización:
+
+```
+ASHA · by Dra. Marcela Pevere
+Versión 2026.09.04.1446 · actualizada el 4 de septiembre de 2026, 14:46
+```
+
+Sirve para una pregunta concreta: cuando alguien dice «a mí no me aparece eso»,
+lo primero es mirar qué versión está usando. Casi siempre es una vieja que quedó
+en el caché del navegador, y se resuelve recargando con `Cmd+Shift+R`.
 
 ### Salir
 

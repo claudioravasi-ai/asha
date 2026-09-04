@@ -296,7 +296,7 @@ registra con otro correo, la base lo rechaza.
 |-----|-----------|
 | **Titular** | Todo, y es el único que puede invitar y dar de baja. |
 | **Médico** | Acceso clínico completo: historias, motor, medicación, procedimientos. |
-| **Secretaría** | Agenda, datos de filiación y bandeja de precargados. **No** ve el contenido clínico: ni diagnóstico, ni medicación, ni evoluciones. |
+| **Secretaría** | Agenda, datos de filiación y bandeja de precargados. **No** ve el contenido clínico: ni diagnóstico, ni medicación, ni evoluciones. El detalle exacto de lo que ve está en el MANUAL.md, sección 0. |
 
 **Una cuenta por persona, nunca compartida.** En una historia clínica hace falta
 poder saber quién escribió cada cosa.
