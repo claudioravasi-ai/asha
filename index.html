@@ -14,7 +14,7 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icons/icon-192.png">
 <link rel="apple-touch-icon" href="icons/icon-192.png">
-<script>window.ALGOS_BUILD = "2026.09.04.1525";</script>
+<script>window.ALGOS_BUILD = "2026.09.04.1532";</script>
 <style>
 /* ==== styles.css ==== */
 /* =========================================================================
@@ -505,7 +505,10 @@ body.portal{overflow:auto; background:var(--lienzo)}
 <div id="app">
   <div class="barra">
     <div class="marca" id="volverInicio" title="Volver al inicio">
-      <b id="marcaNombre">ALGOS</b><span id="marcaFirma"></span><span id="marcaBajada"></span>
+      <!-- El nombre y la firma los completa build.py leyendo marca.js. Escritos
+           a mano se veia el nombre viejo durante una centesima de segundo, hasta
+           que el JavaScript los reemplazaba. -->
+      <b id="marcaNombre">ASHA</b><span id="marcaFirma">by Dra. Marcela Pevere</span><span id="marcaBajada">Unidad de Dolor Agudo y Crónico</span>
     </div>
     <div class="espacio"></div>
     <div class="conexion" id="conexion" title="Estado de sincronización"></div>
@@ -10929,7 +10932,11 @@ function ventanaRevision() {
         dato('Canal con el servidor', ESTADO.conectado
           ? marca('abierto', 'verde') : marca('cerrado', 'ambar') +
             '<div class="nota">El canal abierto no garantiza que puedas escribir: ' +
-            'eso lo deciden las reglas.</div>')));
+            'eso lo deciden las reglas.</div>') +
+        dato('Versión que estás usando', '<span class="mono">' +
+          esc(window.ALGOS_BUILD || '—') + '</span>' +
+          '<div class="nota">Si no coincide con la última que subiste, el navegador ' +
+          'guardó una copia vieja: recargá con Cmd+Shift+R.</div>')));
 
       /* El boton PRIMERO y la salida DEBAJO. Al reves, el resultado se
          insertaba encima del boton: empujaba el boton hacia abajo y aparecia
@@ -10942,10 +10949,13 @@ function ventanaRevision() {
       c.appendChild(salida);
 
       function correr() {
+        console.log('[ASHA] Diagnóstico iniciado', new Date().toISOString());
         salida.innerHTML =
-          '<div class="bloque"><h3>Probando…</h3>' +
+          '<div class="bloque" style="border-left:3px solid var(--acento)">' +
+          '<h3>Probando…</h3>' +
           '<p class="nota">Escribiendo y borrando un dato de prueba en cada rama. ' +
-          'Tarda unos segundos.</p></div>';
+          'Tarda unos segundos. Si en 10 segundos no aparece el resultado, ' +
+          'es que el servidor no está contestando.</p></div>';
         salida.scrollIntoView({block:'nearest'});
         const marcaTiempo = 'prueba_' + Date.now();
 
@@ -10960,20 +10970,31 @@ function ventanaRevision() {
           {r:'config',       que:'la configuración'}
         ];
 
+        /* Tope de tiempo. Si Firebase no contesta, la promesa no se resuelve
+           NUNCA y la pantalla se queda muda: el usuario toca el boton, no pasa
+           nada, y no hay forma de saber si fallo o si esta esperando. Con el
+           tope, siempre hay respuesta. */
+        const conTope = (promesa, seg) => Promise.race([
+          promesa,
+          new Promise((_, rechazar) =>
+            setTimeout(() => rechazar(new Error('sin respuesta en ' + seg + ' segundos')),
+                       seg * 1000))
+        ]);
+
         const pruebas = ramas.map(x =>
-          fbDb.ref('dolor/' + x.r).limitToFirst(1).once('value')
+          conTope(fbDb.ref('dolor/' + x.r).limitToFirst(1).once('value'), 8)
             .then(() => ({...x, lectura:'ok'}))
             .catch(e => ({...x, lectura:'falla', errorL:e.code || e.message}))
             .then(res =>
-              fbDb.ref('dolor/' + x.r + '/' + marcaTiempo).set({prueba:true})
-                .then(() => fbDb.ref('dolor/' + x.r + '/' + marcaTiempo).remove())
+              conTope(fbDb.ref('dolor/' + x.r + '/' + marcaTiempo).set({prueba:true}), 8)
+                .then(() => fbDb.ref('dolor/' + x.r + '/' + marcaTiempo).remove().catch(() => {}))
                 .then(() => ({...res, escritura:'ok'}))
                 .catch(e => ({...res, escritura:'falla', errorE:e.code || e.message})))
         );
 
         /* Y la rama publica, que tiene que leerse SIN sesion. */
         pruebas.push(
-          fbDb.ref('dolor/publico/instalado').once('value')
+          conTope(fbDb.ref('dolor/publico/instalado').once('value'), 8)
             .then(s => ({r:'publico/instalado', que:'la marca de instalado',
                          lectura:'ok', escritura:'—', valor:String(s.val())}))
             .catch(e => ({r:'publico/instalado', que:'la marca de instalado',
@@ -11023,6 +11044,14 @@ function ventanaRevision() {
               'última, y tocá Publicar.</p>' +
               '<p class="nota">Ramas que fallan: ' +
               esc(fallan.map(x => x.que).join(', ')) + '</p></div>';
+          } else if (fallan.every(x => /sin respuesta/i.test((x.errorE || x.errorL || '')))) {
+            conclusion = '<div class="alerta alto"><b>El servidor no contesta</b>' +
+              '<p>Las pruebas se agotaron sin recibir respuesta. No es un problema de ' +
+              'permisos: directamente no hay diálogo con la base.</p>' +
+              '<p class="nota">Suele ser la conexión, o que la dirección de la base ' +
+              '(<span class="mono">databaseURL</span>) no sea la correcta. ' +
+              'Revisá que en Firebase exista la <b>Realtime Database</b> y no solo ' +
+              'Firestore.</p></div>';
           } else {
             conclusion = '<div class="alerta medio"><b>Falla intermitente</b>' +
               '<p>Algunas ramas respondieron y otras no, y el error no es de permisos. ' +
@@ -12497,9 +12526,10 @@ function iniciarAplicacion() {
   if (!$('#pila')) {
     document.body.innerHTML = window.ALGOS_BODY;
   }
-  $('#marcaNombre').textContent = MARCA.nombre;
-  $('#marcaFirma').textContent = MARCA.firma || '';
-  $('#marcaBajada').textContent = MARCA.bajada;
+  /* El nombre, la firma y la bajada ya vienen escritos en el HTML desde
+     build.py, asi que no hace falta volver a ponerlos: hacerlo producia un
+     parpadeo. Solo se enganchan aca por si el cuerpo se restauro. */
+  if (!$('#marcaNombre').textContent) $('#marcaNombre').textContent = MARCA.nombre;
   $('#volverInicio').onclick = () => volverA(0);
   pintarEstadoConexion();
   pintarUsuario();
