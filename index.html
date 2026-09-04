@@ -14,7 +14,7 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icons/icon-192.png">
 <link rel="apple-touch-icon" href="icons/icon-192.png">
-<script>window.ALGOS_BUILD = "2026.09.04.1435";</script>
+<script>window.ALGOS_BUILD = "2026.09.04.1448";</script>
 <style>
 /* ==== styles.css ==== */
 /* =========================================================================
@@ -4750,6 +4750,24 @@ function emailValido(s) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(String(s || '').trim());
 }
 
+/* -------------------------------------------------------------------------
+   La version se arma sola al construir, con el formato AAAA.MM.DD.HHMM. Sirve
+   para saber de un vistazo si el dispositivo que se tiene delante esta viendo
+   la ultima version o quedo con una vieja en cache, que es la primera
+   pregunta cuando alguien dice "a mi no me aparece eso".
+   ------------------------------------------------------------------------- */
+function versionLegible() {
+  const v = String(window.ALGOS_BUILD || '');
+  const m = v.match(/^(\d{4})\.(\d{2})\.(\d{2})\.(\d{2})(\d{2})$/);
+  if (!m) return {version:v || '—', fecha:'', texto:v || 'sin versión'};
+  const [, a, mes, d, h, min] = m;
+  const meses = ['enero','febrero','marzo','abril','mayo','junio','julio',
+                 'agosto','septiembre','octubre','noviembre','diciembre'];
+  const fecha = Number(d) + ' de ' + meses[Number(mes) - 1] + ' de ' + a +
+                ', ' + h + ':' + min;
+  return {version:v, fecha, texto:'Versión ' + v + ' · actualizada el ' + fecha};
+}
+
 /* ---------------------------------------------------------------- estado */
 
 const ESTADO = {
@@ -4877,17 +4895,41 @@ function borrar(rama, id) {
 
 /* --------------------------------------------------------------- avisos  */
 
+const MAX_AVISOS = 3;
+
 function avisar(texto, tipo, ms) {
   const cont = $('#avisos') || document.body;
+
+  /* Si el mismo aviso ya esta en pantalla, no se duplica: se le renueva el
+     tiempo. Cuando se corta internet en medio de una consulta, cada guardado
+     dispara el mismo mensaje y sin esto la pantalla queda tapada por veinte
+     copias de la misma frase. */
+  const iguales = $$('.aviso', cont).filter(n => n.dataset.txt === texto);
+  if (iguales.length) {
+    const n = iguales[iguales.length - 1];
+    clearTimeout(Number(n.dataset.reloj));
+    n.dataset.reloj = programarSalida(n, tipo, ms);
+    return;
+  }
+
+  /* Y nunca mas de tres a la vez: el mas viejo se va. */
+  const vivos = $$('.aviso', cont);
+  for (let i = 0; i <= vivos.length - MAX_AVISOS; i++) vivos[i].remove();
+
   const d = document.createElement('div');
+  d.dataset.txt = texto;
   d.className = 'aviso aviso-' + (tipo || 'info');
   d.innerHTML = esc(texto);
   cont.appendChild(d);
   requestAnimationFrame(() => d.classList.add('entra'));
+  d.dataset.reloj = programarSalida(d, tipo, ms);
+}
+
+function programarSalida(nodo, tipo, ms) {
   const vida = ms || (tipo === 'error' ? 9000 : 4500);
-  setTimeout(() => {
-    d.classList.remove('entra');
-    setTimeout(() => d.remove(), 400);
+  return setTimeout(() => {
+    nodo.classList.remove('entra');
+    setTimeout(() => nodo.remove(), 400);
   }, vida);
 }
 
@@ -6881,9 +6923,6 @@ function pantallaEntrada() {
   c.appendChild(superficie('Crear mi cuenta',
     'Con el código de invitación que te dio el titular', pantallaRegistro, 'suave'));
 
-  c.appendChild(superficie('¿Es la primera vez? Cómo funciona',
-    'Quién puede crear cuentas y por qué', pantallaPrimeraCuenta, 'fina'));
-
   c.appendChild(superficie('Olvidé mi contraseña', null, () => {
     if (!emailValido(d.email)) return avisar('Escribí primero tu correo arriba.', 'error');
     fbAuth.sendPasswordResetEmail(d.email.trim())
@@ -6924,57 +6963,6 @@ function vigilarSesion() {
 }
 
 
-/* -------------------------------------------------------------------------
-   Instructivo de la primera cuenta.
-   ------------------------------------------------------------------------- */
-function pantallaPrimeraCuenta() {
-  /* Solo tiene sentido sobre la pantalla de entrada; si se llama desde otro
-     lado, se la vuelve a montar en vez de reventar contra un nodo que no existe. */
-  if (!$('#entrada')) pantallaEntrada();
-  const c = $('#entrada');
-  if (!c) return;
-  c.innerHTML =
-    '<div style="text-align:center;padding:10px 0 18px">' +
-    '<div style="font-size:20px;font-weight:700;letter-spacing:.07em">' + esc(MARCA.nombre) + '</div>' +
-    '<div class="nota">Cómo crear la primera cuenta</div></div>';
-
-  c.insertAdjacentHTML('beforeend',
-    '<p>Las cuentas se crean <b>desde acá</b>, pero no cualquiera puede crearse una: ' +
-    'hace falta un <b>código de invitación</b> que genera el titular del consultorio.</p>' +
-
-    '<div class="bloque"><h3>Si sos el titular y es la primera vez</h3>' +
-    '<ol style="margin:0;padding-left:20px;font-size:13.5px;line-height:1.7">' +
-    '<li>Tocá <b>«Crear mi cuenta»</b> en la pantalla anterior.</li>' +
-    '<li>Como todavía no hay ninguna cuenta, no te va a pedir código.</li>' +
-    '<li>Poné tu nombre, tu correo y una contraseña.</li>' +
-    '<li>Quedás como <b>titular</b>, con acceso completo.</li>' +
-    '</ol>' +
-    '<p class="nota" style="margin-top:9px">Hacelo <b>apenas publiques la aplicación</b>. ' +
-    'Hasta que exista la primera cuenta, esa pantalla está abierta para cualquiera que ' +
-    'conozca la dirección. En cuanto hay un miembro, se cierra sola.</p></div>' +
-
-    '<div class="bloque"><h3>Para dar de alta a alguien más</h3>' +
-    '<ol style="margin:0;padding-left:20px;font-size:13.5px;line-height:1.7">' +
-    '<li>El titular entra a <b>Ajustes → Equipo → «Invitar a alguien»</b>.</li>' +
-    '<li>Pone el nombre, el correo y el rol: médico o secretaría.</li>' +
-    '<li>La aplicación genera un <b>código</b> de una sola vez.</li>' +
-    '<li>Se lo pasa por el medio que quiera.</li>' +
-    '<li>Esa persona toca <b>«Crear mi cuenta»</b> y usa el código.</li>' +
-    '</ol></div>' +
-
-    '<div class="alerta info"><b>Por qué no alcanza con tener una cuenta</b>' +
-    '<p>Cualquiera que conozca la dirección de la aplicación puede registrarse en ' +
-    'Firebase: la clave del proyecto viaja dentro del programa y eso es así por diseño. ' +
-    'Por eso las reglas de la base <b>no</b> preguntan si estás logueado, sino si figurás ' +
-    'en el equipo. Una cuenta que no fue invitada no puede leer ni escribir nada.</p></div>' +
-
-    '<div class="alerta alto"><b>Antes de cargar un paciente real</b>' +
-    '<p>Tienen que estar publicadas las reglas de seguridad ' +
-    '(<span class="mono">reglas-firebase.txt</span>). Sin ellas nada de lo de arriba se ' +
-    'cumple. Está en el paso 3 de PUBLICAR.md.</p></div>');
-
-  c.appendChild(superficie('◀ Volver a la pantalla de entrada', null, pantallaEntrada, 'suave'));
-}
 
 /* ================ ui-equipo.js ================ */
 /* =========================================================================
@@ -7226,18 +7214,52 @@ function ventanaInvitar() {
    REGISTRO DESDE LA APLICACION
    ========================================================================= */
 
+/* -------------------------------------------------------------------------
+   Marca publica de instalacion.
+
+   Quien todavia no tiene cuenta NO puede leer /dolor/equipo: las reglas se lo
+   impiden, y esta bien que asi sea. Pero entonces la pantalla de registro no
+   tiene forma de saber si el consultorio ya tiene titular, y creia siempre
+   que estaba vacio: le ofrecia a cualquiera el alta de titular, aunque la
+   base despues se lo rechazara.
+
+   Por eso hay un unico dato PUBLICO en toda la base: un si o un no que dice
+   "este consultorio ya esta instalado". No revela nada —ni quien es, ni
+   cuantos son, ni ningun correo— y es lo que permite que la pantalla diga la
+   verdad antes de pedir nada.
+   ------------------------------------------------------------------------- */
+function consultarInstalado() {
+  /* En modo local no hay equipo ni nube: se comporta como recien instalado. */
+  if (!fbDb) return Promise.resolve(false);
+  return fbDb.ref('dolor/publico/instalado').once('value')
+    .then(s => s.val() === true)
+    .catch(() => true);   /* ante la duda, se exige codigo */
+}
+
 function pantallaRegistro() {
   const c = $('#entrada');
   if (!c) return;
   c.innerHTML =
     '<div style="text-align:center;padding:10px 0 18px">' +
     '<div style="font-size:20px;font-weight:700;letter-spacing:.07em">' + esc(MARCA.nombre) + '</div>' +
+    '<div class="nota">Crear mi cuenta</div></div>' +
+    '<p class="nota">Verificando…</p>';
+
+  consultarInstalado().then(instalado => dibujarRegistro(c, instalado));
+}
+
+function dibujarRegistro(c, instalado) {
+  c.innerHTML =
+    '<div style="text-align:center;padding:10px 0 18px">' +
+    '<div style="font-size:20px;font-weight:700;letter-spacing:.07em">' + esc(MARCA.nombre) + '</div>' +
     '<div class="nota">Crear mi cuenta</div></div>';
 
-  const d = {email:'', clave:'', clave2:'', codigo:'', nombre:''};
+  /* La salida va ARRIBA: en la pantalla anterior estaba al final de un texto
+     largo y quien entraba por error no encontraba como volver. */
+  c.appendChild(superficie('◀ Volver', null, pantallaEntrada, 'fina'));
 
-  /* Si el equipo esta vacio, la primera cuenta se crea sin codigo. */
-  const equipoVacio = !ESTADO.equipo || !Object.keys(ESTADO.equipo).length;
+  const d = {email:'', clave:'', clave2:'', codigo:'', nombre:''};
+  const equipoVacio = !instalado;
 
   if (equipoVacio) {
     c.insertAdjacentHTML('beforeend',
@@ -7246,11 +7268,10 @@ function pantallaRegistro() {
       'facultad de invitar al resto. Creala <b>ahora</b>, no dentro de unos días: hasta que ' +
       'exista, esta pantalla está abierta para cualquiera que conozca la dirección.</p></div>');
   } else {
-    c.insertAdjacentHTML('beforeend',
-      '<p class="nota" style="margin-bottom:14px">Necesitás el <b>código de invitación</b> ' +
-      'que te dio el titular del consultorio. Sin eso no se puede crear una cuenta.</p>');
     campo(c, 'Código de invitación', d, 'codigo',
-      {pista:'XXXX-XXXX-XXXX-XXXX', ayuda:'Se escribe con guiones, como te lo pasaron.'});
+      {pista:'XXXX-XXXX-XXXX-XXXX',
+       ayuda:'Con el código de invitación que te dio el titular. Se escribe con guiones, ' +
+             'como te lo pasaron.'});
   }
 
   campo(c, 'Nombre y apellido', d, 'nombre');
@@ -7294,6 +7315,8 @@ function pantallaRegistro() {
                 return fbDb.ref('dolor/invitaciones/' + cod)
                   .update({usada:true, usadaEn:ahora(), usadaPor:uid});
               }
+              /* Primera cuenta: se cierra la puerta para el que venga despues. */
+              return fbDb.ref('dolor/publico/instalado').set(true);
             })
             .then(() => {
               avisar(equipoVacio
@@ -7540,6 +7563,16 @@ function ventanaInicio() {
         }, 'fina'));
 
       c.appendChild(superficie('Ajustes y copia de seguridad', null, ventanaAjustes, 'fina'));
+
+      /* La version, siempre a la vista y al pie. Cuando alguien dice que no le
+         aparece algo, lo primero que hay que saber es que version esta usando:
+         casi siempre es una vieja que quedo en el cache del navegador. */
+      const v = versionLegible();
+      c.insertAdjacentHTML('beforeend',
+        '<p class="nota" style="text-align:center;margin-top:20px;padding-top:14px;' +
+        'border-top:1px solid var(--linea);font-size:11.5px">' +
+        esc(MARCA.nombre) + (MARCA.firma ? ' · ' + esc(MARCA.firma) : '') + '<br>' +
+        esc(v.texto) + '</p>');
     }
   });
 }
