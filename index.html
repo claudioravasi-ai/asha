@@ -14,7 +14,7 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icons/icon-192.png">
 <link rel="apple-touch-icon" href="icons/icon-192.png">
-<script>window.ALGOS_BUILD = "2026.09.04.1537";</script>
+<script>window.ALGOS_BUILD = "2026.09.04.1544";</script>
 <style>
 /* ==== styles.css ==== */
 /* =========================================================================
@@ -93,6 +93,16 @@ input,select,textarea,button{font:inherit; color:inherit}
 .marca #marcaFirma{color:var(--acento); font-weight:500}
 @media(max-width:760px){ .marca #marcaBajada{display:none} }
 .barra .espacio{flex:1}
+
+/* La version, siempre a la vista en la barra. Enterrada en Ajustes obliga a
+   navegar para contestar la pregunta mas frecuente de todas: "¿estoy viendo
+   la version nueva o el navegador me dejo la vieja?". */
+.version-barra{
+  font-size:10.5px; color:var(--tinta-3); letter-spacing:.02em;
+  font-family:ui-monospace, SFMono-Regular, Menlo, monospace;
+  flex:0 0 auto; user-select:all;
+}
+@media(max-width:620px){ .version-barra{display:none} }
 
 .conexion{width:9px; height:9px; border-radius:50%; background:var(--tinta-3); flex:0 0 auto}
 
@@ -511,6 +521,7 @@ body.portal{overflow:auto; background:var(--lienzo)}
       <b id="marcaNombre">ASHA</b><span id="marcaFirma">by Dra. Marcela Pevere</span><span id="marcaBajada">Unidad de Dolor Agudo y Crónico</span>
     </div>
     <div class="espacio"></div>
+    <span class="version-barra" id="versionBarra">2026.09.04.1544</span>
     <div class="conexion" id="conexion" title="Estado de sincronización"></div>
     <div class="usuario" id="usuario" title="Tu cuenta"></div>
   </div>
@@ -10951,11 +10962,20 @@ function ventanaRevision() {
          insertaba encima del boton: empujaba el boton hacia abajo y aparecia
          fuera de donde uno esta mirando, con lo cual parecia que no habia
          pasado nada. */
-      c.appendChild(superficie('Probar ahora',
-        'Escribe y borra un dato de prueba en cada rama', () => correr(), 'acento'));
+      c.appendChild(superficie('Probar de nuevo',
+        'Vuelve a escribir y borrar un dato de prueba en cada rama',
+        () => correr(), 'acento'));
 
       const salida = document.createElement('div');
       c.appendChild(salida);
+
+      /* Corre SOLO al abrir la ventana, sin esperar a que nadie toque nada.
+
+         Un diagnostico que depende de un boton tiene un punto de falla mas: si
+         el boton no responde —o si uno cree que no responde— no hay manera de
+         saber que pasa, que es justo lo contrario de para lo que existe esta
+         pantalla. El boton queda, pero solo para repetir la prueba. */
+      setTimeout(correr, 60);
 
       function correr() {
         console.log('[ASHA] Diagnóstico iniciado', new Date().toISOString());

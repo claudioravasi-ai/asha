@@ -618,11 +618,20 @@ function ventanaRevision() {
          insertaba encima del boton: empujaba el boton hacia abajo y aparecia
          fuera de donde uno esta mirando, con lo cual parecia que no habia
          pasado nada. */
-      c.appendChild(superficie('Probar ahora',
-        'Escribe y borra un dato de prueba en cada rama', () => correr(), 'acento'));
+      c.appendChild(superficie('Probar de nuevo',
+        'Vuelve a escribir y borrar un dato de prueba en cada rama',
+        () => correr(), 'acento'));
 
       const salida = document.createElement('div');
       c.appendChild(salida);
+
+      /* Corre SOLO al abrir la ventana, sin esperar a que nadie toque nada.
+
+         Un diagnostico que depende de un boton tiene un punto de falla mas: si
+         el boton no responde —o si uno cree que no responde— no hay manera de
+         saber que pasa, que es justo lo contrario de para lo que existe esta
+         pantalla. El boton queda, pero solo para repetir la prueba. */
+      setTimeout(correr, 60);
 
       function correr() {
         console.log('[ASHA] Diagnóstico iniciado', new Date().toISOString());

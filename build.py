@@ -67,6 +67,8 @@ def main():
         print('ERROR: src/body.html es obligatorio')
         sys.exit(1)
 
+    marca = leer('marca.js')
+
     css = '\n'.join('/* ==== %s ==== */\n%s' % (f, leer(f)) for f in CSS)
 
     partes = []
@@ -79,11 +81,23 @@ def main():
     # El nombre de la aplicacion vive en src/marca.js. Leerlo de ahi evita que
     # la pestaña del navegador siga diciendo un nombre viejo despues de que se
     # cambio la marca, que es justo lo que pasaba.
-    marca = leer('marca.js')
     m = re.search(r"nombre:\s*'([^']*)'", marca)
     nombre = m.group(1) if m else 'ALGOS'
     m = re.search(r"bajada:\s*'([^']*)'", marca)
     bajada = m.group(1) if m else 'Unidad de Dolor'
+    m = re.search(r"firma:\s*'([^']*)'", marca)
+    firma = m.group(1) if m else ''
+
+    # La barra superior lleva el nombre YA ESCRITO en el HTML. Si se deja el
+    # marcador y se completa despues por JavaScript, durante una centesima de
+    # segundo se ve el nombre anterior y despues cambia: un parpadeo feo y
+    # evitable.
+    cuerpo = (cuerpo.replace('{{MARCA_NOMBRE}}', nombre)
+                    .replace('{{MARCA_FIRMA}}', firma)
+                    .replace('{{MARCA_BAJADA}}', bajada)
+                    # La version tambien va escrita en el HTML, no puesta por
+                    # JavaScript: asi se lee aunque el programa no arranque.
+                    .replace('{{VERSION}}', version))
 
     html = """<!DOCTYPE html>
 <html lang="es-AR">

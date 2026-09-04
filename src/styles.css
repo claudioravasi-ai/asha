@@ -75,6 +75,16 @@ input,select,textarea,button{font:inherit; color:inherit}
 @media(max-width:760px){ .marca #marcaBajada{display:none} }
 .barra .espacio{flex:1}
 
+/* La version, siempre a la vista en la barra. Enterrada en Ajustes obliga a
+   navegar para contestar la pregunta mas frecuente de todas: "¿estoy viendo
+   la version nueva o el navegador me dejo la vieja?". */
+.version-barra{
+  font-size:10.5px; color:var(--tinta-3); letter-spacing:.02em;
+  font-family:ui-monospace, SFMono-Regular, Menlo, monospace;
+  flex:0 0 auto; user-select:all;
+}
+@media(max-width:620px){ .version-barra{display:none} }
+
 .conexion{width:9px; height:9px; border-radius:50%; background:var(--tinta-3); flex:0 0 auto}
 
 /* la cuenta, arriba a la derecha */
