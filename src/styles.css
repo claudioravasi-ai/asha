@@ -489,3 +489,73 @@ body.portal{overflow:auto; background:var(--lienzo)}
   .ventana{max-width:none; box-shadow:none; border:0; break-inside:avoid}
   .cuerpo{overflow:visible; padding:0}
 }
+
+/* ====================================================== CODIGO QR ======= */
+/* El QR va SIEMPRE oscuro sobre blanco, tambien en modo oscuro. No es un
+   descuido del tema: un lector de codigos espera ese contraste y en negativo
+   muchos telefonos no leen nada. La lamina blanca esta para eso. */
+.qr-caja{
+  display:flex; gap:16px; align-items:center; flex-wrap:wrap;
+  background:var(--ventana); border:1px solid var(--linea);
+  border-radius:var(--r); padding:16px; margin:14px 0;
+}
+.qr-lamina{
+  flex:0 0 auto; width:168px; background:#fff; border-radius:10px; padding:10px;
+  box-shadow:0 1px 3px rgba(20,24,33,.12);
+}
+.qr-lamina svg{display:block; width:100%; height:auto}
+.qr-texto{flex:1 1 190px; min-width:0}
+.qr-texto > b{display:block; font-size:14px; margin-bottom:4px}
+.qr-url{
+  margin-top:10px; padding-top:9px; border-top:1px solid var(--linea);
+  color:var(--tinta-3); word-break:break-all;
+}
+
+/* Pasos numerados de la lectura automatica cuando la ficha esta en blanco. */
+.pasos-lectura{
+  margin:6px 0 10px; padding-left:20px; font-size:13px;
+  color:var(--tinta-2); line-height:1.55;
+}
+.pasos-lectura li{margin-bottom:5px}
+.pasos-lectura li b{color:var(--tinta); font-weight:600}
+
+/* ================================================= BLOQUE PLEGADO ======= */
+/* Un dato que hace falta el dia que algo falla y estorba los otros
+   trescientos sesenta y cuatro. Plegado ocupa un renglon; desplegado, todo
+   lo que tenga. Es <details> del navegador: no hay JavaScript que mantener
+   ni un estado que se pueda desincronizar. */
+.plegable{
+  /* NO puede parecerse a una .superficie. Una superficie es blanca, alta y se
+     levanta al pasar por encima; esto es una barra gris, baja y plana. La
+     primera version compartia el borde redondeado y el fondo de tarjeta con
+     los botones que venian abajo, y el "Diagnostico de conexion" que sigue
+     justo despues dejaba de leerse como boton: parecia parte del mismo
+     bloque y daba la impresion de haber desaparecido. */
+  border:0; border-bottom:1px solid var(--linea); border-radius:0;
+  background:transparent; margin:0 0 12px; overflow:hidden;
+}
+.plegable[open]{
+  border-bottom-color:transparent; background:var(--lienzo);
+  border-radius:10px; margin-bottom:14px;
+}
+.plegable > summary{
+  display:flex; align-items:center; gap:10px; cursor:pointer;
+  padding:6px 2px; font-size:11.5px; color:var(--tinta-3);
+  list-style:none; user-select:none;
+}
+.plegable[open] > summary{padding:8px 12px}
+.plegable > summary::-webkit-details-marker{display:none}
+.plegable > summary::after{
+  content:'⌄'; margin-left:2px; color:var(--tinta-3); font-size:13px;
+  transition:transform .18s ease;
+}
+.plegable[open] > summary::after{transform:rotate(180deg)}
+.plegable > summary:hover{color:var(--tinta-2)}
+.plegable-t{flex:1; min-width:0; letter-spacing:.03em}
+.plegable-r{display:flex; align-items:center; gap:8px; min-width:0}
+.plegable-v{
+  font-family:ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size:10.5px; color:var(--tinta-3); white-space:nowrap;
+}
+.plegable-c{padding:2px 12px 10px}
+.plegable-c .dato{font-size:13px}

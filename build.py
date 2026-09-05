@@ -23,6 +23,7 @@ JS = [
     'marca.js',
     'firebase-config.js',
     'email-config.js',
+    'qr.js',
     'data-escalas.js',
     'data-mapa.js',
     'data-sindromes.js',

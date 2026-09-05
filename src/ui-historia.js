@@ -313,6 +313,32 @@ function cajaAnalisis(p, a) {
 
   let h = '';
 
+  /* FICHA EN BLANCO: se dice que falta cargar, y nada más.
+
+     Antes, un paciente recién abierto ya mostraba un mecanismo predominante y
+     un diagnóstico diferencial encabezado por cualquier síndrome. Eso no era
+     una lectura prematura: era una lectura de la nada, y lo peor que puede
+     hacer una aplicación de apoyo diagnóstico es anclar al médico en un
+     diagnóstico que ella misma inventó antes de que existiera un solo dato. */
+  if (a.completitud.vacio) {
+    n.innerHTML = cajaSugerencia('Lectura automática',
+      '<div class="alerta info" style="margin:0"><b>Todavía no hay nada para analizar</b>' +
+      '<p>Esta ficha está en blanco. La aplicación no opina hasta que haya con qué: ' +
+      'ni mecanismo, ni diferencial, ni plan.</p></div>' +
+      '<p class="nota" style="margin-top:10px">Los datos que destraban la lectura, ' +
+      'en orden de peso:</p>' +
+      '<ol class="pasos-lectura">' +
+      '<li><b>El mapa corporal.</b> Dónde duele y con cuánta intensidad. Es el que más ' +
+      'aporta: define la distribución y el territorio.</li>' +
+      '<li><b>Los descriptores y la intensidad.</b> Cómo es ese dolor y cuánto pesa.</li>' +
+      '<li><b>La fecha de inicio.</b> Separa el dolor agudo del crónico.</li>' +
+      '<li><b>El DN4 y el examen físico.</b> Son los que permiten graduar un dolor ' +
+      'neuropático, no solo sospecharlo.</li></ol>' +
+      '<p class="nota">Con dos de estos cinco ya aparece una lectura orientativa; ' +
+      'con todos, una lectura que vale la pena discutir.</p>');
+    return n;
+  }
+
   /* Cuánto se puede confiar en lo que sigue. */
   if (!a.completitud.suficiente) {
     h += '<div class="alerta medio" style="margin-bottom:10px"><b>Faltan datos para analizar bien</b>' +

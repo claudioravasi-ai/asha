@@ -81,9 +81,9 @@ function armarResumenPaciente(p) {
   const ultima = evos[evos.length - 1];
 
   /* --- cómo viene --------------------------------------------------- */
-  let comoViene;
+  let comoViene, cambio = null;
   if (basal != null && actual != null) {
-    const cambio = mejoraPct(basal, actual, false);
+    cambio = mejoraPct(basal, actual, false);
     if (cambio >= 50)
       comoViene = 'Su dolor bajó de ' + basal + ' a ' + actual + ' sobre 10. Es una mejoría ' +
         'importante: más de la mitad de lo que dolía al principio.';
@@ -120,12 +120,17 @@ function armarResumenPaciente(p) {
     return {
       nombre: f ? f.nombre : (m.nombreLibre || '—'),
       pauta: [m.dosis, m.frecuencia].filter(Boolean).join(', '),
-      para: f ? paraQueSirve(m.farmaco) : ''
+      para: f ? paraQueSirve(m.farmaco) : '',
+      /* El grupo se lleva hasta el resumen solo para pintarle una franja de
+         color a cada medicamento. Un opioide y un antiinflamatorio no son la
+         misma cosa, y en una lista de siete renglones todos iguales eso no se
+         ve. */
+      grupo: f ? (f.grupo || '') : ''
     };
   });
 
   return {
-    p, a, ef, comoViene, objetivos, logrados, explicacion, meds,
+    p, a, ef, comoViene, basal, actual, cambio, objetivos, logrados, explicacion, meds,
     ultima, evos,
     alarmas: pautasDeAlarma(p, a),
     /* estos tres son editables antes de enviar */
@@ -215,10 +220,12 @@ function ventanaResumenPaciente(id) {
       previa.style.background = 'var(--ventana)';
       c.appendChild(previa);
 
+      /* La vista previa NO lleva marco ni relleno propios: el documento ya
+         trae los suyos, y encimarlos hacia que en pantalla se viera un
+         recuadro dentro de otro recuadro que en el correo no existe. */
       const pintarPrevia = () => {
         previa.innerHTML = '<h3>Vista previa — esto es exactamente lo que va a recibir</h3>' +
-          '<div style="border:1px solid var(--linea);border-radius:10px;padding:16px;' +
-          'font-size:13.5px;line-height:1.6">' + resumenHTML(r, true) + '</div>';
+          '<div style="margin-top:10px">' + resumenHTML(r, true) + '</div>';
       };
       pintarPrevia();
 
@@ -277,117 +284,371 @@ function enviarResumen(p, r) {
     refrescar();
   });
 }
+/* =========================================================================
+   EL DOCUMENTO
+   -------------------------------------------------------------------------
+   El mismo HTML sirve para las tres salidas: la vista previa dentro de la
+   aplicacion, el correo y el PDF. Que sea uno solo no es comodidad: es la
+   unica manera de que la vista previa sea de verdad lo que el paciente va a
+   recibir, y no una aproximacion que un dia se despega del original.
 
-/* -------------------------------------------------------------------------
-   El documento. `enPantalla` cambia solo los colores, para que se lea bien
-   dentro de la aplicacion; el que se manda por correo va con estilos
-   fijos, porque los clientes de correo no entienden variables de CSS.
-   ------------------------------------------------------------------------- */
+   POR QUE ESTA ARMADO CON TABLAS Y ESTILOS ESCRITOS EN CADA ETIQUETA
+   Porque tiene que verse igual en Gmail, en Outlook y en el Mail del
+   telefono, y esos programas no entienden hojas de estilo, ni flexbox, ni
+   grillas, ni variables de CSS. Todo lo que aca parece anticuado esta asi
+   para que llegue entero a donde se lee.
+
+   QUE CAMBIO RESPECTO DE LA VERSION ANTERIOR
+   Era una carta: titulos, parrafos y una lista. Se leia como un informe y el
+   paciente se perdia. Ahora la informacion esta en TARJETAS, cada seccion
+   tiene su numero, y lo que se mira de un vistazo esta dibujado y no
+   escrito: la evolucion del dolor es una barra con las dos cifras enfrentadas,
+   los objetivos llevan tilde o circulo, cada medicamento tiene su franja de
+   color y para que sirve, y las pautas de alarma estan en un recuadro rojo
+   que no se puede pasar por alto. Un paciente con dolor cronico y mala noche
+   no lee tres carillas seguidas: mira, encuentra y despues lee.
+   ========================================================================= */
+
 function resumenHTML(r, enPantalla) {
   const p = r.p;
-  const col = enPantalla
-    ? {t:'inherit', s:'var(--tinta-3)', a:'var(--acento)', l:'var(--linea)', f:'transparent'}
-    : {t:'#141821', s:'#828b9c', a:'#2d6a72', l:'#dde1e9', f:'#f7f8fa'};
+
+  /* En pantalla se usan las variables del tema, para que el resumen se vea
+     bien tambien de noche. En el correo y en el papel van los colores
+     escritos: alla no hay variables que valgan. */
+  const C = enPantalla ? {
+    tinta:'var(--tinta)', suave:'var(--tinta-2)', tenue:'var(--tinta-3)',
+    acento:'var(--acento)', acentoTinta:'var(--acento-tinta)', acentoClaro:'var(--acento-claro)',
+    linea:'var(--linea)', papel:'var(--ventana)', fondo:'transparent', hueco:'var(--linea)'
+  } : {
+    tinta:'#141821', suave:'#4a5364', tenue:'#828b9c',
+    acento:'#2d6a72', acentoTinta:'#1d4a50', acentoClaro:'#e3f0f1',
+    linea:'#dde1e9', papel:'#ffffff', fondo:'#eef1f5', hueco:'#e4e8ef'
+  };
+  const VERDE = '#2f9e5f', LIMA = '#8cc63f', AMBAR = '#f2b705',
+        NARANJA = '#f2711c', ROJO = '#d92b2b', VIOLETA = '#7c5cc4';
 
   const H = [];
-  const est = 'font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;' +
-              'max-width:640px;margin:0 auto;color:' + col.t + ';line-height:1.6;font-size:15px';
+  const tipografia = '-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica,Arial,sans-serif';
 
-  H.push('<div style="' + est + '">');
+  /* ---------------------------------------------------- ladrillos ------ */
 
-  /* encabezado */
-  H.push('<div style="border-bottom:2px solid ' + col.a + ';padding-bottom:10px;margin-bottom:20px">' +
-    '<div style="font-size:20px;font-weight:700;letter-spacing:.07em">' + esc(MARCA.nombre) + '</div>' +
-    (MARCA.firma ? '<div style="color:' + col.a + ';font-size:13px">' + esc(MARCA.firma) + '</div>' : '') +
-    '<div style="color:' + col.s + ';font-size:12px">' + esc(MARCA.bajada) + '</div></div>');
+  /* Una tarjeta. Con franja de color a la izquierda cuando hay algo que
+     distinguir, sin franja cuando no. */
+  const tarjeta = (dentro, franja, relleno) =>
+    '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" ' +
+    'style="border-collapse:separate;margin:0 0 12px;width:100%"><tr>' +
+    '<td style="background:' + (relleno || C.papel) + ';border:1px solid ' + C.linea + ';' +
+    (franja ? 'border-left:4px solid ' + franja + ';' : '') +
+    'border-radius:12px;padding:15px 17px">' + dentro + '</td></tr></table>';
 
-  H.push('<p style="margin:0 0 4px"><b>' + esc(nombreCompleto(p)) + '</b></p>');
-  H.push('<p style="margin:0 0 18px;color:' + col.s + ';font-size:13px">Resumen al ' +
-    esc(fechaCorta(hoy())) + '</p>');
+  /* Titulo de seccion con su numero. El numero no es decorativo: le dice al
+     paciente cuantas cosas hay y en que orden, que es lo primero que se
+     pregunta el que abre una hoja escrita por un medico. */
+  let nSeccion = 0;
+  const seccion = titulo => {
+    nSeccion++;
+    return '<table role="presentation" cellpadding="0" cellspacing="0" border="0" ' +
+      'style="border-collapse:collapse;margin:26px 0 10px"><tr>' +
+      '<td width="24" height="24" bgcolor="' + C.acento + '" align="center" ' +
+      'style="width:24px;height:24px;background:' + C.acento + ';border-radius:12px;' +
+      'color:#ffffff;font-family:' + tipografia + ';font-size:12px;font-weight:700;' +
+      'line-height:24px;text-align:center">' + nSeccion + '</td>' +
+      '<td style="padding-left:10px;font-family:' + tipografia + ';font-size:13px;' +
+      'font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:' + C.acentoTinta +
+      '">' + esc(titulo) + '</td></tr></table>';
+  };
 
-  H.push('<p>' + esc(r.saludo) + '</p>');
+  const insignia = (texto, fondo, tinta) =>
+    '<span style="background:' + fondo + ';color:' + (tinta || '#ffffff') + ';' +
+    'font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;' +
+    'padding:4px 10px;border-radius:20px;white-space:nowrap">' + esc(texto) + '</span>';
 
-  /* qué tiene */
+  /* La escala del dolor, dibujada. Diez casillas y las primeras N pintadas:
+     es la misma escala del 0 al 10 que el paciente ya contesto en la
+     consulta, asi que no hay nada que explicarle. */
+  const escalaDolor = (valor, color) => {
+    if (valor == null) return '';
+    const c = [];
+    for (let i = 1; i <= 10; i++) {
+      const lleno = i <= valor;
+      c.push('<td width="10%" height="16" bgcolor="' + (lleno ? color : C.hueco) + '" ' +
+        'style="width:10%;height:16px;background:' + (lleno ? color : C.hueco) + ';' +
+        'padding:0;font-size:1px;line-height:16px;' +
+        (i > 1 ? 'border-left:2px solid ' + C.papel + ';' : '') +
+        'border-radius:' + (i === 1 ? '4px 0 0 4px' : i === 10 ? '0 4px 4px 0' : '0') +
+        '">&#8203;</td>');
+    }
+    return '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" ' +
+      'style="border-collapse:collapse;width:100%;margin:4px 0 2px"><tr>' + c.join('') + '</tr></table>' +
+      '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" ' +
+      'style="border-collapse:collapse;width:100%"><tr>' +
+      '<td style="font-size:10.5px;color:' + C.tenue + '">0 · sin dolor</td>' +
+      '<td align="right" style="font-size:10.5px;color:' + C.tenue + '">' +
+      'el peor imaginable · 10</td></tr></table>';
+  };
+
+  const colorNRS = n => n == null ? C.tenue
+    : n >= 8 ? ROJO : n >= 6 ? NARANJA : n >= 4 ? AMBAR : n >= 2 ? LIMA : VERDE;
+
+  const parrafo = (texto, tam) =>
+    '<p style="margin:0 0 10px;font-size:' + (tam || 15) + 'px;line-height:1.6;color:' +
+    C.tinta + '">' + texto + '</p>';
+
+  /* ---------------------------------------------------- encabezado ----- */
+
+  H.push('<div style="font-family:' + tipografia + ';max-width:660px;margin:0 auto;' +
+    'color:' + C.tinta + ';line-height:1.6;font-size:15px;background:' + C.fondo + ';' +
+    'padding:' + (enPantalla ? '0' : '22px') + '">');
+
+  H.push('<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" ' +
+    'style="border-collapse:separate;width:100%;margin-bottom:16px"><tr>' +
+    '<td style="background:' + C.acento + ';border-radius:14px;padding:20px 22px">' +
+    '<div style="font-size:23px;font-weight:700;letter-spacing:.10em;color:#ffffff;' +
+    'line-height:1.2">' + esc(MARCA.nombre) + '</div>' +
+    (MARCA.firma ? '<div style="font-size:13px;color:#cfe6e8;margin-top:3px">' +
+      esc(MARCA.firma) + '</div>' : '') +
+    '<div style="font-size:12px;color:#a8ced2;margin-top:2px;letter-spacing:.03em">' +
+      esc(MARCA.bajada) + '</div>' +
+    '</td></tr></table>');
+
+  /* Quien y cuando. Va en su propia tarjeta y no en un renglon suelto:
+     cuando esta hoja se imprime y se archiva junto a otras cinco, lo primero
+     que hay que poder leer de lejos es de quien es. */
+  H.push(tarjeta(
+    '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" ' +
+    'style="border-collapse:collapse;width:100%"><tr>' +
+    '<td style="vertical-align:middle">' +
+    '<div style="font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;' +
+    'color:' + C.tenue + '">Resumen de tratamiento</div>' +
+    '<div style="font-size:19px;font-weight:700;letter-spacing:-.01em;margin-top:2px">' +
+    esc(nombreCompleto(p)) + '</div>' +
+    (p.dni ? '<div style="font-size:12.5px;color:' + C.tenue + '">Documento ' +
+      esc(p.dni) + '</div>' : '') +
+    '</td>' +
+    '<td align="right" style="vertical-align:middle;white-space:nowrap;padding-left:12px">' +
+    '<div style="font-size:11px;color:' + C.tenue + '">Al día</div>' +
+    '<div style="font-size:15px;font-weight:600">' + esc(fechaCorta(hoy())) + '</div>' +
+    '</td></tr></table>', C.acento));
+
+  H.push(parrafo(esc(r.saludo)));
+
+  /* ---------------------------------------------------- 1. diagnostico - */
+
   if (p.diagnostico.sindrome) {
-    H.push(seccion('Qué es lo que tiene', col));
-    H.push('<p><b>' + esc(p.diagnostico.sindrome) + '.</b>' +
-      (r.explicacion ? ' ' + esc(r.explicacion) : '') + '</p>');
+    H.push(seccion('Qué es lo que tiene'));
+    const nombreMec = {neuropatico:'dolor neuropático', nociplastico:'dolor nociplástico',
+                       nociceptivo:'dolor nociceptivo', mixto:'dolor mixto'};
+    const colorMec = {neuropatico:VIOLETA, nociplastico:AMBAR, nociceptivo:LIMA, mixto:C.acento};
+    const mec = p.diagnostico.mecanismo || r.a.fenotipo.predominante;
+    H.push(tarjeta(
+      '<div style="font-size:19px;font-weight:700;letter-spacing:-.01em;line-height:1.3">' +
+      esc(p.diagnostico.sindrome) + '</div>' +
+      (nombreMec[mec] ? '<div style="margin:9px 0 4px">' +
+        insignia(nombreMec[mec], colorMec[mec] || C.acento,
+                 (mec === 'nociplastico' || mec === 'nociceptivo') ? '#243d05' : '#ffffff') +
+        '</div>' : '') +
+      (r.explicacion ? '<p style="margin:10px 0 0;font-size:14.5px;line-height:1.6;color:' +
+        C.suave + '">' + esc(r.explicacion) + '</p>' : ''),
+      colorMec[mec] || C.acento));
   }
 
-  /* cómo viene */
-  H.push(seccion('Cómo viene el tratamiento', col));
-  H.push('<p>' + esc(r.comoViene) + '</p>');
+  /* ---------------------------------------------------- 2. evolucion --- */
 
+  H.push(seccion('Cómo viene el tratamiento'));
+
+  if (r.basal != null && r.actual != null) {
+    const mejoro = r.cambio >= 0;
+    const colorCambio = r.cambio >= 50 ? VERDE : r.cambio >= 30 ? LIMA
+                      : r.cambio >= 15 ? AMBAR : r.cambio >= 0 ? NARANJA : ROJO;
+    H.push(tarjeta(
+      '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" ' +
+      'style="border-collapse:collapse;width:100%;margin-bottom:12px"><tr>' +
+
+      '<td width="33%" style="width:33%;vertical-align:top">' +
+      '<div style="font-size:10.5px;font-weight:700;letter-spacing:.07em;' +
+      'text-transform:uppercase;color:' + C.tenue + '">Al empezar</div>' +
+      '<div style="font-size:34px;font-weight:700;letter-spacing:-.03em;line-height:1.1;' +
+      'color:' + colorNRS(r.basal) + '">' + r.basal +
+      '<span style="font-size:15px;color:' + C.tenue + ';font-weight:600">/10</span></div>' +
+      '</td>' +
+
+      '<td width="33%" align="center" style="width:33%;vertical-align:middle;' +
+      'font-size:22px;color:' + C.tenue + '">&#8594;</td>' +
+
+      '<td width="34%" align="right" style="width:34%;vertical-align:top">' +
+      '<div style="font-size:10.5px;font-weight:700;letter-spacing:.07em;' +
+      'text-transform:uppercase;color:' + C.tenue + '">Hoy</div>' +
+      '<div style="font-size:34px;font-weight:700;letter-spacing:-.03em;line-height:1.1;' +
+      'color:' + colorNRS(r.actual) + '">' + r.actual +
+      '<span style="font-size:15px;color:' + C.tenue + ';font-weight:600">/10</span></div>' +
+      '</td></tr></table>' +
+
+      escalaDolor(r.actual, colorNRS(r.actual)) +
+
+      '<div style="margin:14px 0 0">' +
+      insignia(mejoro ? 'Bajó un ' + r.cambio + '%' : 'Subió un ' + Math.abs(r.cambio) + '%',
+               colorCambio, (colorCambio === LIMA || colorCambio === AMBAR) ? '#243d05' : '#ffffff') +
+      '</div>' +
+      '<p style="margin:11px 0 0;font-size:14.5px;line-height:1.6;color:' + C.suave + '">' +
+      esc(r.comoViene) + '</p>',
+      colorCambio));
+  } else {
+    H.push(tarjeta('<p style="margin:0;font-size:14.5px;line-height:1.6;color:' + C.suave +
+      '">' + esc(r.comoViene) + '</p>', C.tenue));
+  }
+
+  /* Los objetivos, con tilde o circulo. Es lo que el paciente dijo que
+     queria volver a hacer, y por eso va antes que la medicacion: el
+     tratamiento se mide contra esto, no contra la receta. */
   if (r.objetivos.length) {
-    H.push('<p style="margin-top:12px"><b>Los objetivos que nos pusimos:</b></p>');
-    H.push('<ul style="margin:6px 0 0;padding-left:20px">');
-    for (const o of r.objetivos) {
-      H.push('<li style="margin-bottom:4px">' + esc(o.t) +
-        (o.logrado ? ' <b style="color:#2f9e5f">— logrado</b>'
-                   : ' <span style="color:' + col.s + '">— en eso estamos</span>') + '</li>');
-    }
-    H.push('</ul>');
+    const filas = r.objetivos.map(o =>
+      '<tr><td width="26" style="width:26px;vertical-align:top;padding:7px 0;' +
+      'font-size:16px;line-height:1.3;color:' + (o.logrado ? VERDE : C.tenue) + '">' +
+      (o.logrado ? '&#10003;' : '&#9675;') + '</td>' +
+      '<td style="padding:7px 0;border-bottom:1px solid ' + C.linea + ';font-size:14.5px;' +
+      'line-height:1.5">' + esc(o.t) +
+      '<div style="font-size:12px;color:' + (o.logrado ? VERDE : C.tenue) + ';font-weight:600;' +
+      'margin-top:1px">' + (o.logrado ? 'Logrado' : 'En eso estamos') + '</div>' +
+      '</td></tr>').join('');
+    H.push(tarjeta(
+      '<div style="font-size:11px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;' +
+      'color:' + C.tenue + ';margin-bottom:4px">Los objetivos que nos pusimos</div>' +
+      '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" ' +
+      'style="border-collapse:collapse;width:100%">' + filas + '</table>' +
+      '<div style="font-size:12px;color:' + C.tenue + ';margin-top:9px">' +
+      r.logrados.length + ' de ' + r.objetivos.length + ' cumplidos.</div>'));
   }
 
+  /* El comentario del medico, como una cita. */
   if (r.comentario) {
-    H.push('<div style="background:' + col.f + ';border-left:3px solid ' + col.a + ';' +
-      'padding:12px 14px;border-radius:8px;margin:16px 0">' +
-      esc(r.comentario).replace(/\n/g, '<br>') + '</div>');
+    H.push('<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" ' +
+      'style="border-collapse:separate;width:100%;margin:0 0 12px"><tr>' +
+      '<td style="background:' + C.acentoClaro + ';border-left:4px solid ' + C.acento + ';' +
+      'border-radius:0 12px 12px 0;padding:15px 17px">' +
+      '<div style="font-size:11px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;' +
+      'color:' + C.acentoTinta + ';margin-bottom:5px">Sobre este control</div>' +
+      '<div style="font-size:14.5px;line-height:1.6;color:' + C.tinta + '">' +
+      esc(r.comentario).replace(/\n/g, '<br>') + '</div>' +
+      '</td></tr></table>');
   }
 
-  /* medicación */
+  /* ---------------------------------------------------- 3. medicacion -- */
+
   if (r.meds.length) {
-    H.push(seccion('Lo que está tomando ahora', col));
-    H.push('<table style="width:100%;border-collapse:collapse;font-size:14px">');
+    H.push(seccion('Lo que está tomando ahora'));
     for (const m of r.meds) {
-      H.push('<tr><td style="padding:7px 0;border-bottom:1px solid ' + col.l + ';vertical-align:top">' +
-        '<b>' + esc(m.nombre) + '</b>' +
-        (m.pauta ? '<br><span style="color:' + col.s + '">' + esc(m.pauta) + '</span>' : '') +
-        (m.para ? '<br><span style="color:' + col.s + ';font-size:13px">— ' + esc(m.para) + '</span>' : '') +
-        '</td></tr>');
+      /* Comparacion exacta y no "contiene opioide": el grupo del ibuprofeno
+         se llama literalmente "No opioide", y con una busqueda por substring
+         los antiinflamatorios salian pintados como analgesicos fuertes. */
+      const fuerte = normalizar(m.grupo || '').trim() === 'opioide';
+      const color = fuerte ? NARANJA : C.acento;
+      H.push(tarjeta(
+        '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" ' +
+        'style="border-collapse:collapse;width:100%"><tr>' +
+        '<td style="vertical-align:top">' +
+        '<div style="font-size:16px;font-weight:700;letter-spacing:-.01em">' +
+        esc(m.nombre) + '</div>' +
+        (m.para ? '<div style="font-size:13.5px;color:' + C.suave + ';margin-top:2px">' +
+          esc(m.para.charAt(0).toUpperCase() + m.para.slice(1)) + '</div>' : '') +
+        '</td>' +
+        (m.pauta ? '<td align="right" style="vertical-align:top;padding-left:12px;' +
+          'white-space:nowrap"><span style="display:inline-block;background:' + C.acentoClaro +
+          ';color:' + C.acentoTinta + ';font-size:13px;font-weight:600;padding:5px 11px;' +
+          'border-radius:8px">' + esc(m.pauta) + '</span></td>' : '') +
+        '</tr></table>', color));
     }
-    H.push('</table>');
-    H.push('<p style="font-size:13px;color:' + col.s + ';margin-top:10px">' +
-      'No cambie ni suspenda nada por su cuenta, aunque se sienta mejor. ' +
-      'Varios de estos medicamentos necesitan bajarse de a poco.</p>');
+    H.push('<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" ' +
+      'style="border-collapse:separate;width:100%;margin:0 0 12px"><tr>' +
+      '<td style="background:' + C.acentoClaro + ';border-radius:12px;padding:13px 16px;' +
+      'font-size:13.5px;line-height:1.55;color:' + C.acentoTinta + '">' +
+      '<b>No cambie ni suspenda nada por su cuenta</b>, aunque se sienta mejor. Varios de ' +
+      'estos medicamentos necesitan bajarse de a poco.</td></tr></table>');
   }
 
-  /* qué sigue */
-  H.push(seccion('Qué sigue', col));
+  /* ---------------------------------------------------- 4. que sigue --- */
+
+  H.push(seccion('Qué sigue'));
+
+  if (p.proximoControl) {
+    H.push(tarjeta(
+      '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" ' +
+      'style="border-collapse:collapse;width:100%"><tr>' +
+      '<td width="52" style="width:52px;vertical-align:middle">' +
+      '<div style="background:' + C.acento + ';border-radius:10px;padding:8px 0;' +
+      'text-align:center;color:#ffffff">' +
+      '<div style="font-size:19px;font-weight:700;line-height:1.1">' +
+      esc(fechaCorta(p.proximoControl).slice(0, 2)) + '</div>' +
+      '<div style="font-size:10px;letter-spacing:.06em">' +
+      esc(fechaCorta(p.proximoControl).slice(3, 5)) + '</div></div></td>' +
+      '<td style="padding-left:13px;vertical-align:middle">' +
+      '<div style="font-size:11px;font-weight:700;letter-spacing:.07em;' +
+      'text-transform:uppercase;color:' + C.tenue + '">Próximo control</div>' +
+      '<div style="font-size:15.5px;font-weight:600">' +
+      esc(fechaLarga(p.proximoControl)) + '</div></td>' +
+      '</tr></table>', C.acento));
+  }
+
   const sigue = [];
-  if (p.proximoControl) sigue.push('Próximo control: <b>' + esc(fechaCorta(p.proximoControl)) + '</b>.');
   if ((p.plan.estudios || []).length)
-    sigue.push('Estudios pendientes: ' + esc(p.plan.estudios.join(', ')) + '.');
+    sigue.push(['Estudios pendientes', p.plan.estudios.join(', ')]);
   if ((p.plan.noFarmacologico || []).length)
-    sigue.push('Además de la medicación: ' + esc(p.plan.noFarmacologico.join('; ')) + '.');
+    sigue.push(['Además de la medicación', p.plan.noFarmacologico.join('; ')]);
   if ((p.plan.derivaciones || []).length)
-    sigue.push('Interconsultas: ' + esc(p.plan.derivaciones.join(', ')) + '.');
-  H.push(sigue.length
-    ? '<ul style="margin:0;padding-left:20px">' +
-      sigue.map(x => '<li style="margin-bottom:5px">' + x + '</li>').join('') + '</ul>'
-    : '<p>Seguimos con el plan acordado.</p>');
+    sigue.push(['Interconsultas', p.plan.derivaciones.join(', ')]);
 
-  /* alarmas */
-  H.push(seccion('Cuándo consultar sin esperar el turno', col));
-  H.push('<ul style="margin:0;padding-left:20px">');
-  for (const x of r.alarmas) H.push('<li style="margin-bottom:5px">' + esc(x) + '</li>');
-  H.push('</ul>');
+  if (sigue.length) {
+    H.push(tarjeta(sigue.map(([rotulo, texto], i) =>
+      '<div style="' + (i ? 'margin-top:12px;padding-top:12px;border-top:1px solid ' +
+        C.linea + ';' : '') + '">' +
+      '<div style="font-size:11px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;' +
+      'color:' + C.tenue + '">' + esc(rotulo) + '</div>' +
+      '<div style="font-size:14.5px;line-height:1.55;margin-top:2px">' + esc(texto) + '</div>' +
+      '</div>').join('')));
+  } else if (!p.proximoControl) {
+    H.push(tarjeta('<p style="margin:0;font-size:14.5px;color:' + C.suave +
+      '">Seguimos con el plan acordado.</p>'));
+  }
 
-  H.push('<p style="margin-top:20px">' + esc(r.cierre) + '</p>');
+  /* ---------------------------------------------------- 5. alarmas ----- */
 
-  /* firma y pie */
-  H.push('<div style="margin-top:26px;padding-top:14px;border-top:1px solid ' + col.l + '">');
-  H.push('<p style="margin:0"><b>' + esc(MARCA.titular) + '</b><br>' +
-    '<span style="color:' + col.s + ';font-size:13px">' + esc(MARCA.matricula) + ' · ' +
-    esc(MARCA.especialidad) + '</span></p>');
-  const contacto = [MARCA.telefono, MARCA.email, MARCA.direccion].filter(Boolean).join(' · ');
-  if (contacto) H.push('<p style="margin:6px 0 0;color:' + col.s + ';font-size:13px">' +
-    esc(contacto) + '</p>');
-  H.push('</div>');
+  H.push(seccion('Cuándo consultar sin esperar el turno'));
 
-  H.push('<p style="margin-top:18px;color:' + col.s + ';font-size:11.5px;line-height:1.5">' +
+  H.push('<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" ' +
+    'style="border-collapse:separate;width:100%;margin:0 0 12px"><tr>' +
+    '<td style="background:' + (enPantalla ? 'rgba(217,43,43,.06)' : '#fdf1f1') + ';' +
+    'border:1px solid ' + (enPantalla ? 'rgba(217,43,43,.28)' : '#f3d2d2') + ';' +
+    'border-left:4px solid ' + ROJO + ';border-radius:12px;padding:15px 17px">' +
+    '<div style="font-size:13px;font-weight:700;color:' + ROJO + ';letter-spacing:.03em;' +
+    'margin-bottom:9px">Si aparece cualquiera de estas cosas, no espere</div>' +
+    '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" ' +
+    'style="border-collapse:collapse;width:100%">' +
+    r.alarmas.map(x =>
+      '<tr><td width="18" style="width:18px;vertical-align:top;padding:5px 0;color:' + ROJO +
+      ';font-size:15px;line-height:1.5">&#8226;</td>' +
+      '<td style="padding:5px 0;font-size:14.5px;line-height:1.55;color:' + C.tinta + '">' +
+      esc(x) + '</td></tr>').join('') +
+    '</table></td></tr></table>');
+
+  H.push(parrafo(esc(r.cierre)));
+
+  /* ---------------------------------------------------- firma ---------- */
+
+  /* Se descartan los guiones sueltos: en la marca, un dato que todavia no se
+     cargo esta escrito como "-" o "—", y en el pie de una carta al paciente
+     eso quedaba como "- · correo@..." , que parece un error de impresion. */
+  const contacto = [MARCA.telefono, MARCA.email, MARCA.direccion]
+    .filter(x => x && !/^[-—–\s]*$/.test(String(x))).join(' · ');
+  H.push(tarjeta(
+    '<div style="font-size:15.5px;font-weight:700">' + esc(MARCA.titular) + '</div>' +
+    '<div style="font-size:13px;color:' + C.tenue + ';margin-top:1px">' +
+    esc(MARCA.matricula) + ' · ' + esc(MARCA.especialidad) + '</div>' +
+    (contacto ? '<div style="font-size:13px;color:' + C.suave + ';margin-top:7px;' +
+      'padding-top:7px;border-top:1px solid ' + C.linea + '">' + esc(contacto) + '</div>' : ''),
+    C.acento));
+
+  H.push('<p style="margin:14px 0 0;color:' + C.tenue + ';font-size:11.5px;line-height:1.5">' +
     esc(LEGAL_PIE) + '</p>');
-  H.push('<p style="color:' + col.s + ';font-size:11.5px;line-height:1.5">' +
+  H.push('<p style="margin:8px 0 0;color:' + C.tenue + ';font-size:11.5px;line-height:1.5">' +
     'Este resumen es un complemento de la consulta y no la reemplaza. Su historia clínica ' +
     'completa está en el consultorio y usted puede pedir una copia cuando quiera ' +
     '(Ley 26.529, art. 14).</p>');
@@ -396,18 +657,21 @@ function resumenHTML(r, enPantalla) {
   return H.join('');
 }
 
-function seccion(titulo, col) {
-  return '<h3 style="font-size:13px;text-transform:uppercase;letter-spacing:.06em;' +
-    'color:' + col.a + ';margin:22px 0 8px;font-weight:700">' + esc(titulo) + '</h3>';
-}
-
+/* Imprimir o guardar como PDF. La hoja lleva sus propias reglas de
+   impresion: los colores de fondo no se imprimen si no se piden a mano
+   (print-color-adjust), y sin eso todo el diseño sale en blanco y negro y no
+   se entiende nada. */
 function imprimirResumen(r) {
   const v = window.open('', '_blank');
   if (!v) return avisar('El navegador bloqueó la ventana de impresión.', 'error');
   v.document.write('<!DOCTYPE html><html lang="es-AR"><head><meta charset="utf-8">' +
-    '<title>Resumen — ' + esc(nombreCompleto(r.p)) + '</title>' +
-    '<style>body{margin:1.6cm auto;max-width:19cm}@media print{body{margin:0}}</style>' +
-    '</head><body>' + resumenHTML(r, false) + '</body></html>');
+    '<title>Resumen — ' + esc(nombreCompleto(r.p)) + '</title><style>' +
+    '@page{size:A4;margin:1.1cm}' +
+    'html,body{margin:0;padding:0;background:#eef1f5;' +
+    '-webkit-print-color-adjust:exact;print-color-adjust:exact}' +
+    'table{page-break-inside:avoid;break-inside:avoid}' +
+    '@media print{body{background:#fff}}' +
+    '</style></head><body>' + resumenHTML(r, false) + '</body></html>');
   v.document.close();
-  setTimeout(() => v.print(), 350);
+  setTimeout(() => v.print(), 380);
 }

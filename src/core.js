@@ -301,6 +301,26 @@ function programarSalida(nodo, tipo, ms) {
   }, vida);
 }
 
+/* Baja un aviso ANTES de que se le cumpla el tiempo.
+
+   Existe por un motivo concreto: los avisos de "estoy trabajando" se piden
+   con un tiempo largo, porque nadie sabe cuanto va a tardar la tarea. Cuando
+   la tarea termina en medio segundo, ese cartel se queda quince o veinte
+   segundos mas en la pantalla anunciando algo que ya termino, y el que mira
+   cree que la aplicacion se colgo. El que empieza la tarea es el unico que
+   sabe cuando bajarlo, asi que se lo damos. */
+function cerrarAviso(texto) {
+  const cont = $('#avisos') || document.body;
+  for (const n of $$('.aviso', cont)) {
+    if (texto == null || n.dataset.txt === texto ||
+        (texto instanceof RegExp && texto.test(n.dataset.txt || ''))) {
+      clearTimeout(Number(n.dataset.reloj));
+      n.classList.remove('entra');
+      setTimeout(() => n.remove(), 400);
+    }
+  }
+}
+
 function pintarEstadoConexion() {
   const n = $('#conexion');
   if (!n) return;

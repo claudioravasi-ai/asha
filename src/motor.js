@@ -140,6 +140,13 @@ function construirContexto(p) {
 
     /* del examen */
     signos: new Set((p.examen && p.examen.signos) || []),
+    /* Si hubo examen o no. NO es lo mismo "examine y no encontre alteraciones
+       sensitivas" que "todavia no examine": lo primero es un dato a favor de
+       dolor nociceptivo, lo segundo no es nada. Sin esta bandera la ficha en
+       blanco puntuaba como si estuviera examinada y normal. */
+    examinado: !!(p.examen && (((p.examen.signos || []).length) ||
+                               (p.examen.texto || '').trim() ||
+                               (p.examen.observaciones || '').trim())),
     deficitNeuro: ((p.examen && p.examen.signos) || [])
                     .some(s => ['debilidad','rot_disminuido','hipoestesia'].includes(s)),
 
@@ -267,7 +274,9 @@ function fenotipar(c) {
     noc.puntos += 1; noc.porque.push('Alivia con el reposo');
   }
   if (c.dist === 'localizada') { noc.puntos += 2; noc.porque.push('Dolor localizado y proporcional'); }
-  if (!c.signos.has('alodinia') && !c.signos.has('hipoestesia')) { noc.puntos += 1; noc.porque.push('Sin alteraciones sensitivas al examen'); }
+  if (c.examinado && !c.signos.has('alodinia') && !c.signos.has('hipoestesia')) {
+    noc.puntos += 1; noc.porque.push('Sin alteraciones sensitivas al examen');
+  }
 
   /* ---------------- quién manda ---------------------------------------- */
   const orden = [
@@ -681,13 +690,55 @@ function sugerirPlan(sindromeId, p, c) {
 
 function analizar(p) {
   const c = construirContexto(p);
+  const completitud = medirCompletitud(p, c);
+
+  /* FICHA EN BLANCO: no se opina.
+
+     Una historia recien abierta no tiene mapa, ni descriptores, ni DN4, ni
+     examen. Con eso, el motor igual devolvia "dolor predominantemente
+     nociceptivo" y un diferencial encabezado por cualquier sindrome cuyas
+     reglas se cumplieran por descarte. Era una opinion armada con la nada:
+     el medico abria un paciente nuevo y la aplicacion ya le estaba
+     sugiriendo un diagnostico.
+
+     Las banderas rojas y los reparos de seguridad SI se calculan igual: no
+     salen de la historia del dolor sino de las casillas de antecedentes y de
+     la medicacion cargada, y callarlos por falta de otros datos seria
+     exactamente lo contrario de lo que hay que hacer. */
+  if (completitud.vacio) {
+    return {
+      contexto: c,
+      fenotipo: fenotipoSinDatos(),
+      diferencial: [],
+      banderas: revisarBanderas(p, c),
+      seguridad: revisarSeguridad(p, c),
+      completitud
+    };
+  }
+
   return {
     contexto: c,
     fenotipo: fenotipar(c),
     diferencial: evaluarSindromes(c),
     banderas: revisarBanderas(p, c),
     seguridad: revisarSeguridad(p, c),
-    completitud: medirCompletitud(p, c)
+    completitud
+  };
+}
+
+/* La misma forma que devuelve fenotipar(), pero vacia. Que tenga la misma
+   forma no es prolijidad: es lo que permite que todo lo que consume el
+   analisis siga funcionando sin preguntar antes si hay datos. */
+function fenotipoSinDatos() {
+  return {
+    neuropatico:  {puntos:0, grado:'no', porque:[]},
+    nociplastico: {puntos:0, grado:'no', porque:[]},
+    nociceptivo:  {puntos:0, porque:[]},
+    predominante: 'indeterminado',
+    mixto: false,
+    segundo: null,
+    sinDatos: true,
+    texto: 'Todavía no hay datos cargados para orientar el mecanismo del dolor.'
   };
 }
 
@@ -702,9 +753,15 @@ function medirCompletitud(p, c) {
   if (!c.meses && c.meses !== 0) faltan.push('la fecha de inicio del dolor');
   if (!(p.examen && (p.examen.signos || []).length)) faltan.push('el examen físico');
   const total = 6;
+  const cargados = total - faltan.length;
   return {
     faltan,
-    porcentaje: Math.round(((total - faltan.length) / total) * 100),
-    suficiente: faltan.length <= 2
+    cargados,
+    total,
+    porcentaje: Math.round((cargados / total) * 100),
+    suficiente: faltan.length <= 2,
+    /* Con uno solo de los seis pilares (o con ninguno) no hay analisis
+       posible. No es "poco confiable": es que no hay nada que analizar. */
+    vacio: cargados <= 1
   };
 }

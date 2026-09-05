@@ -83,25 +83,9 @@ function ventanaInicio() {
           ventanaHistoria(p.id);
         }, 'suave'));
 
-      c.appendChild(superficie('Enlace del portal del paciente',
-        'La dirección que se le pasa a quien saca turno', () => {
-          const url = location.origin + location.pathname + '#turno';
-          abrir({id:'enlace', titulo:'Portal del paciente', dibujar(cc) {
-            cc.insertAdjacentHTML('beforeend',
-              '<p>Esta es la dirección que se le da a la persona cuando saca el turno. ' +
-              'Ahí deja su documento y su correo, y le llega el enlace a su cuestionario.</p>' +
-              '<div class="bloque"><h3>Dirección del portal</h3>' +
-              '<p class="mono" style="word-break:break-all">' + esc(url) + '</p></div>' +
-              '<p class="nota">Conviene imprimirla en el ticket del turno o dejar un código QR ' +
-              'en el mostrador. Es el paso que más cuesta: la aplicación puede estar impecable, ' +
-              'pero si el paciente no se entera de que existe, nadie la usa.</p>');
-            cc.appendChild(superficie('Copiar la dirección', null, () => {
-              navigator.clipboard.writeText(url)
-                .then(() => avisar('Dirección copiada.', 'ok'))
-                .catch(() => avisar('No se pudo copiar. Seleccionala a mano.', 'error'));
-            }, 'suave'));
-          }});
-        }, 'fina'));
+      c.appendChild(superficie('Portal del paciente',
+        'La dirección y el código QR que se le pasan a quien saca turno',
+        ventanaPortalEnlace, 'fina'));
 
       c.appendChild(superficie('Ajustes y copia de seguridad', null, ventanaAjustes, 'fina'));
 
@@ -125,6 +109,185 @@ function teja(cont, numero, titulo, detalle, alTocar, clase) {
     '<div><b>' + esc(titulo) + '</b><small>' + esc(detalle) + '</small></div>';
   t.onclick = alTocar;
   cont.appendChild(t);
+}
+
+/* =========================================================================
+   LA PUERTA DE ENTRADA DEL PACIENTE
+   -------------------------------------------------------------------------
+   Es el paso que mas cuesta de toda la aplicacion. El programa puede estar
+   impecable: si el paciente no se entera de que el cuestionario existe, no
+   lo completa nadie y las consultas siguen arrancando de cero.
+
+   Por eso esta ventana da las tres formas de que se entere, y no una sola:
+
+     · EL CODIGO QR, para el mostrador. Se apunta la camara y se abre. Es la
+       que mejor funciona con quien no escribe comodo en el telefono, que en
+       una unidad de dolor es mucha gente.
+     · EL CARTEL IMPRESO, que es el QR grande y con instrucciones, listo para
+       pegar o para dejar sobre el escritorio.
+     · EL CORREO, para cuando el turno se saca por telefono y no hay
+       mostrador donde mirar nada.
+
+   El QR se genera aca y ahora a partir de la direccion real en la que esta
+   corriendo la aplicacion. No es una imagen guardada: el dia que la
+   aplicacion se mude de direccion, el QR se muda con ella sin que nadie
+   tenga que acordarse de cambiarlo.
+   ========================================================================= */
+
+function urlDelPortal() {
+  return location.origin + location.pathname + '#turno';
+}
+
+function ventanaPortalEnlace() {
+  const url = urlDelPortal();
+  abrir({id:'enlace', titulo:'Portal del paciente',
+    sub:'Dirección, código QR y envío por correo', ctx:{email:'', mensaje:''},
+    dibujar(cc, ctx) {
+
+      cc.insertAdjacentHTML('beforeend',
+        '<p>Esta es la puerta de entrada del paciente. Ahí deja su documento y su correo, ' +
+        'y le llega a su casilla el enlace personal al cuestionario.</p>');
+
+      /* --- el QR, que es lo que la gente usa de verdad ----------------- */
+      const caja = document.createElement('div');
+      caja.className = 'qr-caja';
+      caja.innerHTML =
+        '<div class="qr-lamina">' + qrSVG(url, {nivel:QR_Q}) + '</div>' +
+        '<div class="qr-texto">' +
+          '<b>Apunte la cámara del teléfono</b>' +
+          '<p class="nota">No hace falta ninguna aplicación: la cámara sola lo reconoce ' +
+          'y ofrece abrir la página.</p>' +
+          '<p class="mono qr-url">' + esc(url) + '</p>' +
+        '</div>';
+      cc.appendChild(caja);
+
+      cc.appendChild(superficie('Copiar la dirección', null, () => {
+        navigator.clipboard.writeText(url)
+          .then(() => avisar('Dirección copiada.', 'ok'))
+          .catch(() => avisar('No se pudo copiar. Seleccionala a mano.', 'error'));
+      }, 'fina suave'));
+
+      cc.appendChild(superficie('Descargar el código QR',
+        'Una imagen PNG, para pegarla en un cartel hecho aparte', () => {
+          qrPNG(url, {modulo:16, nivel:QR_Q}, datos => {
+            if (!datos) return avisar('No se pudo generar el código.', 'error');
+            const a = document.createElement('a');
+            a.href = datos;
+            a.download = normalizar(MARCA.nombre).replace(/[^a-z0-9]+/g, '-') +
+                         '-portal-qr.png';
+            a.click();
+            avisar('Código QR descargado.', 'ok');
+          });
+        }, 'fina suave'));
+
+      cc.appendChild(superficie('Imprimir el cartel para el mostrador',
+        'Una hoja lista para pegar, con el código grande y las instrucciones',
+        () => imprimirCartelPortal(url), 'fina suave'));
+
+      /* --- mandarlo por correo ---------------------------------------- */
+      cc.insertAdjacentHTML('beforeend',
+        '<h3 style="font-size:13px;text-transform:uppercase;letter-spacing:.05em;' +
+        'color:var(--tinta-3);margin:22px 0 8px">Enviarlo por correo</h3>');
+
+      if (!envioConfigurado()) {
+        cc.insertAdjacentHTML('beforeend',
+          '<div class="alerta medio"><b>El envío de correo no está configurado</b>' +
+          '<p>Se puede copiar la dirección o imprimir el cartel igual. Para activar el ' +
+          'envío automático, ver el paso 6 de PUBLICAR.md.</p></div>');
+      } else {
+        cc.insertAdjacentHTML('beforeend',
+          '<p class="nota" style="margin-bottom:10px">Para cuando el turno se saca por ' +
+          'teléfono. Este correo <b>no lleva ningún dato clínico ni personal</b>: es la ' +
+          'misma dirección pública que está pegada en el mostrador, con el código QR ' +
+          'adentro. Se puede mandar sin ningún reparo.</p>');
+
+        campo(cc, 'Correo a quien enviarlo', ctx, 'email',
+              {tipo:'email', pista:'nombre@correo.com'});
+        campo(cc, 'Mensaje (opcional)', ctx, 'mensaje',
+              {area:true, filas:3,
+               ayuda:'Si se deja vacío va el texto de siempre. Sirve para agregar la fecha ' +
+                     'del turno o el nombre de la persona que atendió el teléfono.'});
+
+        cc.appendChild(superficie('Enviar la dirección por correo', null, () => {
+          const email = String(ctx.email || '').trim().toLowerCase();
+          if (!emailValido(email)) return avisar('El correo no parece válido.', 'error');
+          avisar('Enviando…', 'aviso', 20000);
+          enviarDireccionDelPortal(email, url, String(ctx.mensaje || '').trim())
+            .then(ok => {
+              cerrarAviso('Enviando…');
+              if (ok) {
+                avisar('Enviado a ' + email + '.', 'ok');
+                ctx.email = '';
+                refrescarVentanaActiva();
+              } else {
+                avisar('No se pudo enviar. Revisá la dirección y probá de nuevo.', 'error');
+              }
+            })
+            .catch(() => {
+              cerrarAviso('Enviando…');
+              avisar('No se pudo enviar. Revisá la conexión.', 'error');
+            });
+        }, 'acento'));
+      }
+
+      cc.insertAdjacentHTML('beforeend',
+        '<p class="nota" style="margin-top:20px;padding-top:14px;' +
+        'border-top:1px solid var(--linea)">El código apunta a la dirección donde está ' +
+        'publicada esta aplicación en este momento. Si algún día se muda de servidor, ' +
+        'el código se actualiza solo: hay que volver a imprimir el cartel, nada más.</p>');
+    }});
+}
+
+/* El cartel del mostrador. Se abre en una ventana aparte y se manda a
+   imprimir: en una hoja A4 entra el codigo lo bastante grande como para
+   leerlo desde el otro lado del escritorio. */
+function imprimirCartelPortal(url) {
+  const v = window.open('', '_blank');
+  if (!v) return avisar('El navegador bloqueó la ventana de impresión.', 'error');
+  const qr = qrSVG(url, {nivel:QR_Q, estilo:'width:100%;height:auto;display:block'});
+  v.document.write('<!DOCTYPE html><html lang="es-AR"><head><meta charset="utf-8">' +
+    '<title>' + esc(MARCA.nombre) + ' — cartel del portal</title><style>' +
+    '@page{size:A4;margin:1.4cm}' +
+    'body{margin:0;font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;' +
+    'color:#141821;text-align:center;line-height:1.5}' +
+    '.marca{font-size:26px;font-weight:700;letter-spacing:.10em;margin:0}' +
+    '.firma{color:#2d6a72;font-size:14px;margin:2px 0 0}' +
+    '.bajada{color:#828b9c;font-size:12.5px;margin:2px 0 0}' +
+    '.titulo{font-size:30px;font-weight:700;letter-spacing:-.02em;margin:26px 0 6px;' +
+    'line-height:1.2}' +
+    '.sub{font-size:15px;color:#4a5364;margin:0 auto 22px;max-width:15cm}' +
+    '.qr{width:10.5cm;margin:0 auto;padding:14px;border:2px solid #141821;border-radius:18px}' +
+    '.pasos{display:table;margin:24px auto 0;text-align:left;font-size:14px;' +
+    'color:#2b3240;max-width:14cm}' +
+    '.paso{display:table-row}' +
+    '.paso b{display:table-cell;color:#2d6a72;font-size:19px;padding:0 12px 12px 0;' +
+    'vertical-align:top;white-space:nowrap}' +
+    '.paso span{display:table-cell;padding-bottom:12px;vertical-align:top}' +
+    '.url{margin-top:20px;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12.5px;' +
+    'color:#4a5364;word-break:break-all}' +
+    '.pie{margin-top:20px;padding-top:12px;border-top:1px solid #dde1e9;font-size:11.5px;' +
+    'color:#828b9c}' +
+    '</style></head><body>' +
+    '<p class="marca">' + esc(MARCA.nombre) + '</p>' +
+    (MARCA.firma ? '<p class="firma">' + esc(MARCA.firma) + '</p>' : '') +
+    '<p class="bajada">' + esc(MARCA.bajada) + '</p>' +
+    '<p class="titulo">Complete su cuestionario<br>antes de la consulta</p>' +
+    '<p class="sub">Cuanto más completo llegue, más aprovechamos el tiempo del turno. ' +
+    'Lleva entre 10 y 15 minutos y se puede hacer en varias veces.</p>' +
+    '<div class="qr">' + qr + '</div>' +
+    '<div class="pasos">' +
+    '<div class="paso"><b>1</b><span>Abra la cámara del teléfono y apúntela al código. ' +
+    'No hace falta instalar nada.</span></div>' +
+    '<div class="paso"><b>2</b><span>Toque el aviso que aparece en la pantalla.</span></div>' +
+    '<div class="paso"><b>3</b><span>Deje su documento y su correo. Le llega un enlace ' +
+    'personal para completarlo con calma en su casa.</span></div>' +
+    '</div>' +
+    '<p class="url">' + esc(url) + '</p>' +
+    '<p class="pie">' + esc(MARCA.titular) + ' · ' + esc(MARCA.matricula) + ' · ' +
+    esc(MARCA.ciudad) + '</p>' +
+    '</body></html>');
+  v.document.close();
+  setTimeout(() => v.print(), 400);
 }
 
 /* ====================================================== PACIENTES ======= */

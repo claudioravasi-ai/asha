@@ -31,7 +31,15 @@ QUE HACEN, EN CASTELLANO
    cierra sola en cuanto hay un miembro.
    >>> POR ESO HAY QUE CREAR ESA CUENTA APENAS SE PUBLICA LA APLICACION. <<<
 
-4. EL PACIENTE NO TIENE CUENTA Y NO LA VA A TENER.
+4. HAY UN UNICO DATO PUBLICO EN TODA LA BASE.
+   /dolor/publico/instalado es un si o un no que dice si el consultorio ya
+   tiene titular. Lo lee cualquiera, y hace falta: quien todavia no tiene
+   cuenta no puede leer /dolor/equipo, asi que sin esta marca la pantalla de
+   registro no sabria si ofrecer el alta de titular o pedir un codigo, y
+   ofrecia siempre lo primero. No revela nada: ni quien, ni cuantos, ni
+   ningun correo. Solo se puede escribir una vez, o cambiarla el titular.
+
+5. EL PACIENTE NO TIENE CUENTA Y NO LA VA A TENER.
    La rama de precargas es la unica que acepta escritura sin cuenta. Pero:
      · NO se puede LISTAR la rama entera: nadie puede pedir "dame todos los
        cuestionarios";
@@ -48,6 +56,18 @@ COPIAR DESDE LA LLAVE DE ABAJO HASTA LA ULTIMA LLAVE
 {
   "rules": {
     "dolor": {
+
+      "publico": {
+        ".read": true,
+        "instalado": {
+          ".write": "auth != null && (
+                       !root.child('dolor/publico/instalado').exists()
+                       ||
+                       root.child('dolor/equipo').child(auth.uid).child('rol').val() === 'titular'
+                     )",
+          ".validate": "newData.isBoolean()"
+        }
+      },
 
       "equipo": {
         ".read": "auth != null && root.child('dolor/equipo').child(auth.uid).exists()",
@@ -152,6 +172,7 @@ En "Simulador de reglas", probar estas cinco cosas:
 
   UBICACION                        TIPO      AUTENTICADO   ESPERADO
   ---------------------------------------------------------------------
+  /dolor/publico/instalado         Lectura   No            PERMITIDO
   /dolor/pacientes                 Lectura   No            DENEGADO
   /dolor/precargas                 Lectura   No            DENEGADO
   /dolor/equipo                    Lectura   No            DENEGADO

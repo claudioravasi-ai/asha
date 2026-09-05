@@ -312,11 +312,19 @@ function ventanaAjustes() {
           .map(([r, n]) => n + ' en ' + r).join(' · ')) + '</p></div>');
       c.appendChild(superficie('Borrar los ' + cuantos + ' registros de prueba',
         'No toca ningún paciente real', () => {
-          const nodo = $('#pila .ventana:last-child .cuerpo');
-          avisar('Borrando ' + cuantos + ' registros…', 'aviso', 20000);
+          /* El cartel de "estoy borrando" se pide con veinte segundos porque
+             nadie sabe cuánto va a tardar, pero casi siempre termina en menos
+             de uno. Sin bajarlo a mano al terminar, el cartel se quedaba en
+             pantalla anunciando un borrado que ya había terminado hacía
+             quince segundos, y parecía que la aplicación se había colgado.
+             Por eso se guardan los textos exactos: para poder cerrarlos. */
+          const enCurso = 'Borrando ' + cuantos + ' registros…';
+          const bajarCarteles = () => { cerrarAviso(enCurso); cerrarAviso(/^Borrando… lote /); };
+          avisar(enCurso, 'aviso', 20000);
           limpiarRestos((hechos, total) => {
             if (total > 1) avisar('Borrando… lote ' + hechos + ' de ' + total, 'aviso', 3000);
           }).then(r => {
+            bajarCarteles();
             if (r.lotesFallados) {
               avisar('Se borraron ' + r.total + ' registros de este dispositivo, pero ' +
                      r.lotesFallados + ' de ' + r.lotes + ' lotes no se pudieron borrar del ' +
@@ -327,13 +335,33 @@ function ventanaAjustes() {
             refrescar();
           }).catch(e => {
             console.error(e);
+            bajarCarteles();
             avisar('No se pudo completar la limpieza. Probá de nuevo.', 'error');
             refrescar();
           });
         }, 'acento'));
     }
 
-    c.insertAdjacentHTML('beforeend', bloque('Estado de la aplicación',
+    /* EL ESTADO, PLEGADO.
+
+       Ocho renglones de diagnostico tecnico encabezando la pantalla de
+       ajustes le decian al que entra que lo primero que tiene que mirar es
+       si la base sincroniza, y no es cierto: eso se mira el dia que algo
+       falla, y ese dia se abre. El resto de los dias alcanza con una linea
+       que diga que todo esta en orden. Va con <details>, que es del propio
+       navegador: se pliega y se despliega sin una linea de JavaScript y sin
+       que haya que acordarse en que estado quedo. */
+    const enOrden = ESTADO.conectado || !firebaseConfigurado();
+    c.insertAdjacentHTML('beforeend',
+      '<details class="plegable">' +
+      '<summary><span class="plegable-t">Estado de la aplicación</span>' +
+      '<span class="plegable-r">' +
+      marca(ESTADO.conectado ? 'en la nube'
+            : firebaseConfigurado() ? 'sin conexión' : 'solo este dispositivo',
+            enOrden ? 'verde' : 'ambar') +
+      '<span class="plegable-v">' + esc(window.ALGOS_BUILD || '—') + '</span>' +
+      '</span></summary>' +
+      '<div class="plegable-c">' +
       dato('Sincronización', ESTADO.conectado
         ? marca('conectada a la nube', 'verde')
         : marca(firebaseConfigurado() ? 'sin conexión' : 'solo este dispositivo', 'ambar')) +
@@ -350,7 +378,8 @@ function ventanaAjustes() {
         return m ? marca((ROLES[m.rol] || {}).nombre || m.rol, 'acento') +
                    '<div class="nota">' + esc((ROLES[m.rol] || {}).detalle || '') + '</div>'
                  : marca('sin equipo (modo local)', 'neutro'); })()) +
-      dato('Versión', window.ALGOS_BUILD || '—')));
+      dato('Versión', window.ALGOS_BUILD || '—') +
+      '</div></details>');
 
     if (firebaseConfigurado()) {
       c.appendChild(superficie('Diagnóstico de conexión',
@@ -382,13 +411,34 @@ function ventanaAjustes() {
     c.insertAdjacentHTML('beforeend',
       '<h3 style="font-size:13px;text-transform:uppercase;letter-spacing:.05em;' +
       'color:var(--tinta-3);margin:18px 0 8px">Copia de seguridad</h3>' +
-      '<p class="nota" style="margin-bottom:10px">La copia baja un archivo con TODA la base. ' +
-      'Conviene hacerlo una vez por semana y guardarlo fuera de esta computadora. Es una ' +
-      'historia clínica: tratalo como tal.</p>');
-    c.appendChild(superficie('Descargar copia de seguridad', null, exportarRespaldo, 'suave'));
+      '<p class="nota" style="margin-bottom:10px">Un archivo con TODA la base: pacientes, ' +
+      'cuestionarios del portal, agenda y configuración. Conviene bajarlo una vez por semana ' +
+      'y guardarlo fuera de esta computadora. Es una historia clínica: tratalo como tal.</p>' +
+      /* Las tres preguntas que se hace cualquiera antes de tocar un boton que
+         dice "copia de seguridad": que baja, adonde va y como es por dentro.
+         Contestarlas aca evita la unica respuesta peligrosa, que es no
+         hacer la copia por no saber que iba a pasar. */
+      '<div class="bloque" style="margin-bottom:10px">' +
+      dato('Qué contiene', 'Todos los pacientes con su historia completa, los cuestionarios ' +
+        'del portal, la agenda y la configuración del consultorio. No incluye las cuentas ' +
+        'del equipo ni las claves.') +
+      dato('Dónde se guarda', 'En la carpeta de descargas de <b>esta</b> computadora, como ' +
+        'cualquier archivo bajado del navegador. No se sube a ningún lado: de ahí hay que ' +
+        'moverlo a un pendrive o a un disco externo.') +
+      dato('En qué formato', 'Un archivo <b>.json</b> de texto, llamado <span class="mono">' +
+        esc(normalizar(MARCA.nombre).replace(/[^a-z0-9]+/g, '-')) +
+        '-respaldo-' + esc(hoy()) + '.json</span>. Se abre con cualquier editor de texto y ' +
+        'lo lee la propia aplicación al restaurar.') +
+      dato('Sin cifrar', '<b>El archivo no tiene contraseña.</b> Cualquiera que lo abra lee ' +
+        'las historias clínicas enteras. Guardalo como guardarías la carpeta de papel: bajo ' +
+        'llave, y no en una carpeta compartida ni en un correo.') +
+      '</div>');
+    c.appendChild(superficie('Descargar copia de seguridad',
+      'Un archivo .json a la carpeta de descargas de esta computadora',
+      exportarRespaldo, 'suave'));
 
     const importar = superficie('Restaurar desde una copia',
-      'Incorpora los pacientes del archivo; los repetidos se sobrescriben', () => {
+      'Se elige un archivo .json bajado antes; los pacientes repetidos se sobrescriben', () => {
         const inp = document.createElement('input');
         inp.type = 'file';
         inp.accept = '.json,application/json';
@@ -438,171 +488,717 @@ function ventanaAjustes() {
   }});
 }
 
-/* ====================================================== IMPRESION ======= */
+/* =========================================================================
+   LA HISTORIA CLINICA, IMPRESA
+   -------------------------------------------------------------------------
+   Es el unico documento de la aplicacion que sale para OTRO MEDICO: se
+   adjunta a una derivacion, se lleva a una junta, se archiva en la carpeta
+   de papel. Eso manda sobre todas las decisiones de diseño y las hace casi
+   opuestas a las del resumen para el paciente.
+
+     · DENSIDAD ANTES QUE AIRE. Al colega no hay que explicarle nada, hay que
+       darle todo y que lo encuentre rapido. Cuerpo de 9,3 puntos y datos en
+       dos columnas: entra el triple por carilla y se lee igual de bien.
+     · LO URGENTE, PRIMERO. Las banderas rojas y los reparos de seguridad van
+       arriba de todo, antes que la filiacion. Una bandera roja escondida en
+       la pagina cuatro es una bandera roja que nadie vio.
+     · LOS NUMEROS, DIBUJADOS. La intensidad, la concordancia de cada
+       diferencial, el puntaje de cada escala y la efectividad van con su
+       barra. Un 7/10 escrito y un 7/10 dibujado tardan lo mismo en
+       imprimirse y no tardan lo mismo en leerse.
+     · QUE NO SE PARTA. Cada tarjeta lleva break-inside:avoid: una tabla de
+       medicacion cortada al medio por un salto de pagina obliga a dar vuelta
+       la hoja para leer una dosis, y asi es como se lee mal una dosis.
+
+   Antes esto salia como texto plano con lineas de igual: cuatro carillas de
+   renglones identicos donde encontrar el filtrado glomerular era cuestion de
+   suerte.
+   ========================================================================= */
 
 function imprimirHistoria(id) {
   const p = ESTADO.pacientes[id];
   if (!p) return;
   const a = analizar(p);
   const ef = efectividadPaciente(p);
-  const L = [];
-  const linea = t => L.push(t);
-  const seccion = t => L.push('\n\n═══ ' + t.toUpperCase() + ' ═══');
 
-  linea(MARCA.nombre + ' — ' + MARCA.consultorio);
-  if (MARCA.titular !== 'Dr. —') linea(MARCA.titular + ' · ' + MARCA.matricula);
-  linea('HISTORIA CLÍNICA DE DOLOR — impresa el ' + fechaCorta(hoy()));
+  const A = '#2d6a72', AT = '#1d4a50', ACL = '#e8f2f3';
+  const TINTA = '#141821', SUAVE = '#4a5364', TENUE = '#7d8698', LINEA = '#dde1e9';
+  const VERDE = '#2f9e5f', LIMA = '#7fb32e', AMBAR = '#d9a406',
+        NARANJA = '#f2711c', ROJO = '#d92b2b', VIOLETA = '#7c5cc4';
 
-  seccion('Filiación');
-  linea('Paciente: ' + nombreCompleto(p));
-  linea('Documento: ' + (p.dni || '—') + '   Nacimiento: ' + (p.fechaNac ? fechaCorta(p.fechaNac) +
-    ' (' + edadDe(p.fechaNac) + ' años)' : '—'));
-  linea('Sexo: ' + (p.sexo === 'F' ? 'femenino' : p.sexo === 'M' ? 'masculino' : '—') +
-    '   Cobertura: ' + (p.obraSocial || '—'));
-  linea('Ocupación: ' + (p.ocupacion || '—') + '   Derivado por: ' + (p.derivante || '—'));
+  const H = [];
+  const T = x => esc(x == null || x === '' ? '—' : x);
 
-  seccion('Antecedentes');
-  linea('Enfermedades: ' + (p.antecedentes.enfermedades || '—'));
-  linea('Cirugías: ' + (p.antecedentes.cirugias || '—'));
-  linea('Alergias: ' + (p.antecedentes.alergias || '—'));
-  linea('Familiares: ' + (p.antecedentes.familiares || '—'));
-  linea('Hábitos: ' + (p.antecedentes.habitos || '—'));
-  linea('Otra medicación: ' + (p.antecedentes.medicacionNoDolor || '—'));
+  /* ------------------------------------------------------- ladrillos --- */
 
-  seccion('Historia del dolor');
-  linea('Inicio: ' + (p.dolor.inicio ? fechaCorta(p.dolor.inicio) + ' (' +
-    (mesesDesde(p.dolor.inicio) || 0) + ' meses de evolución)' : '—'));
-  linea('Mecanismo de comienzo: ' + (p.dolor.mecanismo || '—'));
-  linea('Descripción: ' + (p.dolor.descripcion || '—'));
-  linea('Descriptores: ' + ((p.dolor.descriptores || []).map(v =>
-    (DESCRIPTORES.find(x => x.v === v) || {t:v}).t).join(', ') || '—'));
-  linea('Intensidad — ahora: ' + (p.dolor.nrsAhora ?? '—') + '/10   promedio: ' +
-    (p.dolor.nrsPromedio ?? '—') + '/10   peor: ' + (p.dolor.nrsPeor ?? '—') +
-    '/10   mejor: ' + (p.dolor.nrsMejor ?? '—') + '/10');
-  linea('Patrón: ' + (p.dolor.patron || '—') + '   Peor momento: ' + (p.dolor.peorMomento || '—'));
-  linea('Irradiación: ' + (p.dolor.irradiacion || '—'));
-  linea('Lo alivia: ' + (p.dolor.alivia || '—'));
-  linea('Lo empeora: ' + (p.dolor.empeora || '—'));
+  let nSec = 0;
+  const seccion = titulo => {
+    nSec++;
+    H.push('<h2><span class="n">' + nSec + '</span>' + esc(titulo) + '</h2>');
+  };
 
-  seccion('Mapa dermatomal del dolor');
-  const lm = leerMapa(p.dolor.mapa || []);
-  if (lm.total) {
-    linea('Distribución ' + lm.distribucion + ', intensidad máxima ' + lm.intensidadMax + '/10' +
-      (lm.bilateral ? ', bilateral' : ', unilateral'));
-    linea('Zonas: ' + lm.zonas.map(z => nombreZona(z.z) + ' (' + z.i + '/10)').join(' · '));
-    linea('Índice de dolor generalizado (WPI): ' + lm.wpi + '/19 en ' + lm.areas.length + ' de 5 áreas');
-    const rz = raizDominante(lm);
-    if (rz) linea('Territorio predominante: ' + rz.raiz + ' (' + rz.proporcion + '% de las marcas)');
-  } else linea('Sin marcas registradas.');
+  const abrirTarjeta = clase => H.push('<div class="t' + (clase ? ' ' + clase : '') + '">');
+  const cerrarTarjeta = () => H.push('</div>');
 
-  seccion('Repercusión en la vida diaria');
-  linea('Sueño: ' + (p.impacto.sueño || '—'));
-  linea('Trabajo y actividades: ' + (p.impacto.trabajo || '—'));
-  linea('Ánimo: ' + (p.impacto.animo || '—'));
-  linea('Actividades abandonadas: ' + (p.impacto.dejoDeHacer || '—'));
-  linea('Objetivos acordados: ' + ((p.impacto.objetivos || []).map(o =>
-    (typeof o === 'string' ? o : o.t) + (o.logrado ? ' [LOGRADO]' : '')).join(' · ') || '—'));
+  /* Los datos van en dos columnas y no en renglones sueltos: el rotulo
+     siempre en el mismo lugar es lo que permite barrer la hoja con la vista
+     buscando uno solo, que es como se lee una historia ajena. */
+  const filas = pares => {
+    const vivas = pares.filter(x => x);
+    if (!vivas.length) return;
+    H.push('<table class="d">');
+    for (const [rot, val, ancho] of vivas)
+      H.push('<tr><th>' + esc(rot) + '</th><td' + (ancho ? ' class="ancho"' : '') + '>' +
+             val + '</td></tr>');
+    H.push('</table>');
+  };
 
-  seccion('Tratamientos previos y su resultado');
-  if ((p.tratamientosPrevios || []).length) {
-    for (const t of p.tratamientosPrevios)
-      linea('· ' + (t.que || '—') + ' — ' + (t.cuando || 's/f') + ' — ' + (t.resultado || 's/d') +
-        (t.obs ? ' — ' + t.obs : ''));
-  } else linea('—');
+  const barra = (pct, color, alto) =>
+    '<span class="b" style="height:' + (alto || 7) + 'px"><i style="width:' +
+    Math.max(0, Math.min(100, pct)) + '%;background:' + color + '"></i></span>';
 
-  seccion('Medicación actual');
-  if ((p.medicacion || []).length) {
-    for (const m of p.medicacion) {
-      const f = FARMACOS[m.farmaco];
-      linea('· ' + (f ? f.nombre : m.nombreLibre || '—') + ' ' + (m.dosis || '') + ' ' +
-        (m.frecuencia || '') + (m.desde ? ' — desde ' + fechaCorta(m.desde) : ''));
-    }
-    linea('Carga opioide total: ' + a.seguridad.mme.total + ' MME/día (' + a.seguridad.mme.nivel + ')');
-  } else linea('—');
+  const colorNRS = n => n == null ? TENUE
+    : n >= 8 ? ROJO : n >= 6 ? NARANJA : n >= 4 ? AMBAR : n >= 2 ? LIMA : VERDE;
 
-  seccion('Examen físico');
-  const signosTxt = [];
-  for (const g of EXAMEN_SIGNOS)
-    for (const i of g.items)
-      if ((p.examen.signos || []).includes(i.v)) signosTxt.push(i.t);
-  linea('Signos: ' + (signosTxt.join(' · ') || '—'));
-  linea(p.examen.texto || '');
-  if (p.examen.observaciones) linea('Observaciones: ' + p.examen.observaciones);
+  const nrsConBarra = n => n == null ? '—'
+    : '<b style="color:' + colorNRS(n) + '">' + n + '</b><span class="u">/10</span> ' +
+      barra(n * 10, colorNRS(n));
 
-  seccion('Escalas aplicadas');
-  const esc_ = Object.entries(p.escalas || {}).filter(([, v]) => v && v.total != null);
-  if (esc_.length) {
-    for (const [k, v] of esc_) {
-      const e = ESCALAS[k];
-      const corte = interpretarEscala(k, v.total);
-      linea('· ' + (e ? e.sigla : k) + ': ' + v.total + (e && e.porcentual ? '%' : '') +
-        (corte ? ' — ' + corte.etiqueta : '') + '  (' + fechaCorta(v.fecha) + ')' +
-        (v.parcial ? ' [incompleta]' : ''));
-    }
-  } else linea('—');
+  const pastilla = (txt, color, fondo) =>
+    '<span class="p" style="color:' + color + ';background:' + (fondo || 'transparent') +
+    ';border-color:' + color + '">' + esc(txt) + '</span>';
 
-  seccion('Impresión diagnóstica');
-  linea('Síndrome: ' + (p.diagnostico.sindrome || '—'));
-  linea('Código ICD-11: ' + (p.diagnostico.icd || '—'));
-  linea('Mecanismo: ' + (p.diagnostico.mecanismo || '—') +
-    (p.diagnostico.grado ? ' — grado ' + p.diagnostico.grado : ''));
-  if (p.diagnostico.texto) linea(p.diagnostico.texto);
-  linea('');
-  linea('Lectura automática de la aplicación: ' + a.fenotipo.texto);
-  if (a.diferencial.length)
-    linea('Diferencial ponderado: ' + a.diferencial.slice(0, 4).map(d =>
-      d.sindrome.nombre + ' ' + d.concordancia + '%').join(' · '));
+  const COLOR_NOMBRE = {verde:VERDE, lima:LIMA, ambar:AMBAR, naranja:NARANJA,
+                        rojo:ROJO, violeta:VIOLETA, acento:A, neutro:TENUE};
+
+  /* ------------------------------------------------------ encabezado --- */
+
+  H.push('<div class="cab">' +
+    '<div class="cab-i"><div class="marca">' + esc(MARCA.nombre) + '</div>' +
+    (MARCA.firma ? '<div class="firma">' + esc(MARCA.firma) + '</div>' : '') +
+    '<div class="bajada">' + esc(MARCA.consultorio) + ' · ' + esc(MARCA.ciudad) + '</div></div>' +
+    '<div class="cab-d"><div class="tipo">Historia clínica de dolor</div>' +
+    '<div class="fecha">Impresa el ' + esc(fechaCorta(hoy())) + '</div>' +
+    (MARCA.titular !== 'Dr. —' ? '<div class="fecha">' + esc(MARCA.titular) + ' · ' +
+      esc(MARCA.matricula) + '</div>' : '') +
+    '</div></div>');
+
+  /* ------------------------------------------------- quien es --------- */
+
+  const edad = edadDe(p.fechaNac);
+  H.push('<div class="t ident">' +
+    '<div class="nombre">' + esc(nombreCompleto(p)) + '</div>' +
+    '<div class="tira">' +
+    '<span><b>DNI</b> ' + T(p.dni) + '</span>' +
+    '<span><b>Nacimiento</b> ' + (p.fechaNac ? esc(fechaCorta(p.fechaNac)) +
+      (edad != null ? ' (' + edad + ' años)' : '') : '—') + '</span>' +
+    '<span><b>Sexo</b> ' + T(p.sexo === 'F' ? 'femenino' : p.sexo === 'M' ? 'masculino' : '') + '</span>' +
+    '<span><b>Cobertura</b> ' + T(p.obraSocial) + '</span>' +
+    '<span><b>Ocupación</b> ' + T(p.ocupacion) + '</span>' +
+    '<span><b>Derivado por</b> ' + T(p.derivante) + '</span>' +
+    '</div></div>');
+
+  /* ------------------------------------------- tablero de cabecera ----- */
+
+  const nrsHoy = ultimoNRS(p);
+  const mme = a.seguridad.mme;
+  H.push('<div class="tablero">');
+
+  H.push('<div class="cel"><div class="rot">Diagnóstico</div>' +
+    '<div class="val chico">' + T(p.diagnostico.sindrome) + '</div>' +
+    (p.diagnostico.icd ? '<div class="sub">' + esc(p.diagnostico.icd) + '</div>' : '') +
+    '</div>');
+
+  H.push('<div class="cel"><div class="rot">Intensidad actual</div>' +
+    '<div class="val" style="color:' + colorNRS(nrsHoy) + '">' +
+    (nrsHoy == null ? '—' : nrsHoy + '<span class="u">/10</span>') + '</div>' +
+    (nrsHoy == null ? '' : barra(nrsHoy * 10, colorNRS(nrsHoy), 6)) + '</div>');
+
+  H.push('<div class="cel"><div class="rot">Carga opioide</div>' +
+    '<div class="val" style="color:' + (COLOR_NOMBRE[mme.color] || TENUE) + '">' +
+    mme.total + '<span class="u">MME/día</span></div>' +
+    '<div class="sub">' + esc(mme.nivel) + '</div></div>');
+
+  H.push('<div class="cel"><div class="rot">Efectividad del plan</div>' +
+    (ef.porcentaje == null
+      ? '<div class="val">—</div><div class="sub">sin datos suficientes</div>'
+      : '<div class="val" style="color:' + ef.banda.color + '">' + ef.porcentaje +
+        '<span class="u">%</span></div>' +
+        barra(Math.max(0, ef.porcentaje), ef.banda.color, 6) +
+        '<div class="sub">' + esc(ef.banda.etiqueta) + '</div>') +
+    '</div>');
+
+  H.push('</div>');
+
+  /* --------------------------------------- lo urgente, antes que nada -- */
 
   if (a.banderas.length) {
-    seccion('Banderas rojas');
-    for (const b of a.banderas) linea('· ' + b.txt + ' → ' + b.accion);
+    H.push('<div class="t alarma"><div class="alarma-t">Banderas rojas — ' +
+      a.banderas.length + '</div>');
+    for (const b of a.banderas)
+      H.push('<div class="linea-alarma"><b>' + esc(b.txt) + '</b><span>' +
+             esc(b.accion) + '</span></div>');
+    H.push('</div>');
   }
 
+  const reparos = (a.seguridad.avisos || []).filter(x => x.nivel === 'alto' || x.nivel === 'medio');
+  if (reparos.length) {
+    H.push('<div class="t reparo"><div class="reparo-t">Reparos de seguridad farmacológica — ' +
+      reparos.length + '</div>');
+    for (const x of reparos)
+      H.push('<div class="linea-alarma"><b style="color:' +
+        (x.nivel === 'alto' ? ROJO : AMBAR) + '">' + esc(x.titulo) + '</b><span>' +
+        esc(x.texto) + '</span></div>');
+    H.push('</div>');
+  }
+
+  /* ------------------------------------------------- 1. antecedentes --- */
+
+  seccion('Antecedentes');
+  abrirTarjeta();
+  filas([
+    ['Enfermedades', T(p.antecedentes.enfermedades), true],
+    ['Cirugías', T(p.antecedentes.cirugias), true],
+    /* La alergia va en rojo, pero SOLO si es una alergia. "Ninguna conocida"
+       escrito en rojo y en negrita es exactamente el mismo aviso visual que
+       "alergia a la morfina", y en una hoja que se lee apurada eso no es un
+       detalle de estilo. */
+    ['Alergias', !p.antecedentes.alergias ? 'No refiere'
+      : /^\s*(no|ninguna|niega|sin|nada)\b/i.test(p.antecedentes.alergias)
+        ? esc(p.antecedentes.alergias)
+        : '<b style="color:' + ROJO + '">' + esc(p.antecedentes.alergias) + '</b>', true],
+    ['Familiares', T(p.antecedentes.familiares), true],
+    ['Hábitos', T(p.antecedentes.habitos), true],
+    ['Otra medicación', T(p.antecedentes.medicacionNoDolor), true],
+    p.antecedentes.filtrado ? ['Filtrado glomerular', esc(p.antecedentes.filtrado) + ' ml/min'] : null
+  ]);
+  cerrarTarjeta();
+
+  /* --------------------------------------------- 2. historia del dolor - */
+
+  seccion('Historia del dolor');
+  abrirTarjeta();
+  const meses = p.dolor.inicio ? mesesDesde(p.dolor.inicio) : null;
+  filas([
+    ['Inicio', p.dolor.inicio
+      ? esc(fechaCorta(p.dolor.inicio)) + '  ' +
+        pastilla((meses || 0) + ' meses de evolución',
+                 (meses || 0) >= 3 ? NARANJA : SUAVE)
+      : '—'],
+    ['Mecanismo de comienzo', T(p.dolor.mecanismo), true],
+    ['Descripción', T(p.dolor.descripcion), true],
+    ['Descriptores', (p.dolor.descriptores || []).length
+      ? (p.dolor.descriptores || []).map(v =>
+          pastilla((DESCRIPTORES.find(x => x.v === v) || {t:v}).t, AT, ACL)).join(' ')
+      : '—', true],
+    ['Patrón', T(p.dolor.patron)],
+    ['Peor momento', T(p.dolor.peorMomento)],
+    ['Irradiación', T(p.dolor.irradiacion), true],
+    ['Lo alivia', T(p.dolor.alivia), true],
+    ['Lo empeora', T(p.dolor.empeora), true]
+  ]);
+
+  H.push('<div class="intens">' +
+    ['nrsAhora:Ahora', 'nrsPromedio:Promedio', 'nrsPeor:Peor', 'nrsMejor:Mejor']
+      .map(par => {
+        const [k, rot] = par.split(':');
+        const n = p.dolor[k];
+        return '<div><div class="rot">' + rot + '</div><div class="v">' +
+          nrsConBarra(n == null ? null : Number(n)) + '</div></div>';
+      }).join('') + '</div>');
+  cerrarTarjeta();
+
+  /* ------------------------------------------------- 3. mapa corporal -- */
+
+  seccion('Mapa corporal del dolor');
+  abrirTarjeta();
+  const lm = leerMapa(p.dolor.mapa || []);
+  if (lm.total) {
+    const rz = raizDominante(lm);
+    filas([
+      ['Distribución', pastilla(lm.distribucion, A, ACL) + ' ' +
+        pastilla(lm.bilateral ? 'bilateral' : 'unilateral', SUAVE)],
+      ['Índice generalizado', 'WPI ' + lm.wpi + '/19 en ' + lm.areas.length + ' de 5 áreas ' +
+        barra((lm.wpi / 19) * 100, lm.wpi >= 7 ? NARANJA : A)],
+      rz ? ['Territorio predominante', '<b>' + esc(rz.raiz) + '</b> — ' + rz.proporcion +
+            '% de las marcas ' + barra(rz.proporcion, VIOLETA)] : null
+    ]);
+    H.push('<table class="zonas">');
+    for (const z of lm.zonas)
+      H.push('<tr><td class="z">' + esc(nombreZona(z.z)) + '</td>' +
+        '<td class="i"><b style="color:' + colorNRS(z.i) + '">' + z.i + '</b>' +
+        '<span class="u">/10</span></td>' +
+        '<td class="g">' + barra(z.i * 10, colorNRS(z.i)) + '</td></tr>');
+    H.push('</table>');
+  } else {
+    H.push('<p class="vacio">Sin marcas registradas en el mapa corporal.</p>');
+  }
+  cerrarTarjeta();
+
+  /* --------------------------------------------------- 4. repercusión -- */
+
+  seccion('Repercusión en la vida diaria');
+  abrirTarjeta();
+  filas([
+    ['Sueño', T(p.impacto.sueño), true],
+    ['Trabajo y actividades', T(p.impacto.trabajo), true],
+    ['Ánimo', T(p.impacto.animo), true],
+    ['Dejó de hacer', T(p.impacto.dejoDeHacer), true]
+  ]);
+  const objs = (p.impacto.objetivos || []).map(o => typeof o === 'string' ? {t:o} : o)
+                                          .filter(o => o && o.t);
+  if (objs.length) {
+    H.push('<div class="rot" style="margin-top:7px">Objetivos acordados con el paciente</div>');
+    H.push('<table class="objs">');
+    for (const o of objs)
+      H.push('<tr><td class="mk" style="color:' + (o.logrado ? VERDE : TENUE) + '">' +
+        (o.logrado ? '&#10003;' : '&#9675;') + '</td><td>' + esc(o.t) + '</td>' +
+        '<td class="est" style="color:' + (o.logrado ? VERDE : TENUE) + '">' +
+        (o.logrado ? 'logrado' : 'pendiente') + '</td></tr>');
+    H.push('</table>');
+  }
+  cerrarTarjeta();
+
+  /* ------------------------------------------ 5. tratamientos previos -- */
+
+  seccion('Tratamientos previos y su resultado');
+  abrirTarjeta();
+  if ((p.tratamientosPrevios || []).length) {
+    H.push('<table class="lista"><thead><tr><th>Qué</th><th>Cuándo</th>' +
+           '<th>Resultado</th><th>Observaciones</th></tr></thead><tbody>');
+    for (const t of p.tratamientosPrevios) {
+      const fallo = /igual|empeor|sin cambio|no sirvi|nada/i.test(t.resultado || '');
+      H.push('<tr><td><b>' + T(t.que) + '</b></td><td>' + T(t.cuando) + '</td>' +
+        '<td>' + (t.resultado
+          ? pastilla(t.resultado, fallo ? ROJO : VERDE)
+          : '—') + '</td><td class="obs">' + T(t.obs) + '</td></tr>');
+    }
+    H.push('</tbody></table>');
+  } else H.push('<p class="vacio">No se registraron tratamientos previos.</p>');
+  cerrarTarjeta();
+
+  /* -------------------------------------------- 6. medicación actual --- */
+
+  seccion('Medicación actual');
+  abrirTarjeta();
+  if ((p.medicacion || []).length) {
+    H.push('<table class="lista"><thead><tr><th>Fármaco</th><th>Grupo</th><th>Dosis</th>' +
+           '<th>Frecuencia</th><th>Desde</th></tr></thead><tbody>');
+    for (const m of p.medicacion) {
+      const f = FARMACOS[m.farmaco];
+      const opioide = f && f.grupo === 'Opioide';
+      H.push('<tr' + (opioide ? ' class="op"' : '') + '>' +
+        '<td><b>' + esc(f ? f.nombre : (m.nombreLibre || '—')) + '</b></td>' +
+        '<td class="gr">' + T(f ? f.grupo : '') + '</td>' +
+        '<td>' + T(m.dosis) + '</td><td>' + T(m.frecuencia) + '</td>' +
+        '<td>' + (m.desde ? esc(fechaCorta(m.desde)) : '—') + '</td></tr>');
+    }
+    H.push('</tbody></table>');
+    if (mme.total > 0) {
+      H.push('<div class="mme" style="border-color:' + (COLOR_NOMBRE[mme.color] || TENUE) + '">' +
+        '<div class="mme-n" style="color:' + (COLOR_NOMBRE[mme.color] || TENUE) + '">' +
+        mme.total + '<span class="u">MME/día</span></div>' +
+        '<div class="mme-t"><b>' + esc(mme.nivel) + '</b>' +
+        (mme.aviso ? '<span>' + esc(mme.aviso) + '</span>' : '') +
+        (mme.detalle.length ? '<span class="det">' + mme.detalle.map(d =>
+          esc((FARMACOS[d.id] || {}).nombre || d.id) + ' ' + d.mme).join(' · ') +
+          ' MME</span>' : '') + '</div></div>');
+    }
+  } else H.push('<p class="vacio">Sin medicación cargada.</p>');
+  cerrarTarjeta();
+
+  /* ------------------------------------------------ 7. examen físico --- */
+
+  seccion('Examen físico');
+  abrirTarjeta();
+  const signos = [];
+  for (const g of EXAMEN_SIGNOS)
+    for (const i of g.items)
+      if ((p.examen.signos || []).includes(i.v)) signos.push(i.t);
+  if (signos.length || p.examen.texto || p.examen.observaciones) {
+    if (signos.length)
+      H.push('<div class="chips">' + signos.map(x => pastilla(x, AT, ACL)).join(' ') + '</div>');
+    filas([
+      p.examen.texto ? ['Descripción', esc(p.examen.texto), true] : null,
+      p.examen.observaciones ? ['Observaciones', esc(p.examen.observaciones), true] : null
+    ]);
+  } else H.push('<p class="vacio">Examen físico no registrado.</p>');
+  cerrarTarjeta();
+
+  /* --------------------------------------------- 8. escalas aplicadas -- */
+
+  seccion('Escalas aplicadas');
+  abrirTarjeta();
+  const aplicadas = Object.entries(p.escalas || {}).filter(([, v]) => v && v.total != null);
+  if (aplicadas.length) {
+    H.push('<table class="lista escalas"><thead><tr><th>Escala</th><th>Puntaje</th>' +
+           '<th></th><th>Interpretación</th><th>Fecha</th></tr></thead><tbody>');
+    for (const [k, v] of aplicadas) {
+      const e = ESCALAS[k] || {};
+      const corte = interpretarEscala(k, v.total);
+      const tope = e.porcentual ? 100 : (e.rango ? e.rango[1] : null);
+      const col = corte ? (COLOR_NOMBRE[corte.color] || A) : A;
+      H.push('<tr><td><b>' + esc(e.sigla || k) + '</b>' +
+        (e.nombre ? '<div class="gr">' + esc(e.nombre) + '</div>' : '') + '</td>' +
+        '<td class="num"><b style="color:' + col + '">' + v.total + '</b>' +
+        (tope ? '<span class="u">/' + tope + '</span>' : e.porcentual ? '<span class="u">%</span>' : '') +
+        '</td>' +
+        '<td class="g">' + (tope ? barra((v.total / tope) * 100, col) : '') + '</td>' +
+        '<td>' + (corte ? pastilla(corte.etiqueta, col) : '—') +
+        (v.parcial ? ' ' + pastilla('incompleta', NARANJA) : '') + '</td>' +
+        '<td>' + esc(fechaCorta(v.fecha)) + '</td></tr>');
+    }
+    H.push('</tbody></table>');
+  } else H.push('<p class="vacio">No se aplicó ninguna escala.</p>');
+  cerrarTarjeta();
+
+  /* ---------------------------------------- 9. impresión diagnóstica --- */
+
+  seccion('Impresión diagnóstica');
+  abrirTarjeta();
+  const NOMBRE_MEC = {neuropatico:'neuropático', nociplastico:'nociplástico',
+                      nociceptivo:'nociceptivo', mixto:'mixto', indeterminado:'indeterminado'};
+  const COLOR_MEC = {neuropatico:VIOLETA, nociplastico:AMBAR, nociceptivo:LIMA,
+                     mixto:A, indeterminado:TENUE};
+  filas([
+    ['Síndrome', '<b class="grande">' + T(p.diagnostico.sindrome) + '</b>', true],
+    ['Código CIE-11', T(p.diagnostico.icd)],
+    ['Mecanismo', p.diagnostico.mecanismo
+      ? pastilla(NOMBRE_MEC[p.diagnostico.mecanismo] || p.diagnostico.mecanismo,
+                 COLOR_MEC[p.diagnostico.mecanismo] || A) +
+        (p.diagnostico.grado ? ' ' + pastilla('grado ' + p.diagnostico.grado, SUAVE) : '')
+      : '—'],
+    p.diagnostico.texto ? ['Fundamento', esc(p.diagnostico.texto), true] : null
+  ]);
+  cerrarTarjeta();
+
+  /* La lectura de la maquina va aparte y rotulada como tal: en una historia
+     que va a leer otro medico tiene que quedar claro que esto lo propuso un
+     programa y no lo firmo nadie. */
+  H.push('<div class="t maquina">');
+  H.push('<div class="maquina-t">Lectura automática de la aplicación</div>');
+  H.push('<p class="fen">' + esc(a.fenotipo.texto) + '</p>');
+  if (a.diferencial.length) {
+    H.push('<div class="rot">Diagnóstico diferencial ponderado</div>');
+    H.push('<table class="dif">');
+    for (const d of a.diferencial.slice(0, 5)) {
+      const col = d.concordancia >= 70 ? VERDE : d.concordancia >= 50 ? AMBAR : TENUE;
+      H.push('<tr><td class="s">' + esc(d.sindrome.nombre) + '</td>' +
+        '<td class="pc" style="color:' + col + '">' + d.concordancia + '%</td>' +
+        '<td class="g">' + barra(d.concordancia, col) + '</td>' +
+        '<td class="af">' + esc(d.aFavor.slice(0, 3).join(' · ')) + '</td></tr>');
+    }
+    H.push('</table>');
+  }
+  if (!a.completitud.suficiente)
+    H.push('<p class="falta">Análisis orientativo: falta cargar ' +
+      esc(a.completitud.faltan.join(', ')) + '.</p>');
+  H.push('<p class="aviso">' + esc(AVISO_SUGERENCIA) + '</p></div>');
+
+  /* ---------------------------------------------- 10. plan terapéutico - */
+
   seccion('Plan terapéutico');
-  linea('Objetivo: ' + (p.plan.objetivo || '—'));
-  linea(p.plan.texto || '');
-  if ((p.plan.estudios || []).length) linea('Estudios: ' + p.plan.estudios.join(' · '));
-  if ((p.plan.noFarmacologico || []).length) linea('No farmacológico: ' + p.plan.noFarmacologico.join(' · '));
-  if ((p.plan.derivaciones || []).length) linea('Derivaciones: ' + p.plan.derivaciones.join(' · '));
-  if ((p.plan.procedimientos || []).length)
-    linea('Procedimientos planificados: ' + p.plan.procedimientos.map(x =>
-      (PROCEDIMIENTOS[x] || {nombre:x}).nombre).join(' · '));
-  linea('Próximo control: ' + (p.proximoControl ? fechaCorta(p.proximoControl) : '—'));
+  abrirTarjeta();
+  filas([
+    ['Objetivo', T(p.plan.objetivo), true],
+    p.plan.texto ? ['Plan', esc(p.plan.texto), true] : null,
+    (p.plan.estudios || []).length ? ['Estudios',
+      p.plan.estudios.map(x => pastilla(x, AT, ACL)).join(' '), true] : null,
+    (p.plan.noFarmacologico || []).length ? ['No farmacológico',
+      esc(p.plan.noFarmacologico.join('; ')), true] : null,
+    (p.plan.derivaciones || []).length ? ['Derivaciones',
+      p.plan.derivaciones.map(x => pastilla(x, AT, ACL)).join(' '), true] : null,
+    (p.plan.procedimientos || []).length ? ['Procedimientos planificados',
+      p.plan.procedimientos.map(x =>
+        pastilla((PROCEDIMIENTOS[x] || {nombre:x}).nombre, VIOLETA)).join(' '), true] : null,
+    ['Próximo control', p.proximoControl
+      ? '<b>' + esc(fechaLarga(p.proximoControl)) + '</b>' : '—']
+  ]);
+  cerrarTarjeta();
+
+  /* ---------------------------------------------------- 11. evolución -- */
 
   seccion('Evolución');
   if ((p.evoluciones || []).length) {
+    H.push('<div class="t linea-tiempo">');
     for (const e of p.evoluciones) {
-      linea('');
-      linea('— ' + fechaCorta(e.fecha) + (e.nrs != null ? '   NRS ' + e.nrs + '/10' : ''));
-      if (e.texto) linea(e.texto);
-      if (e.cambios) linea('Cambios: ' + e.cambios);
-      if ((e.adversos || []).length)
-        linea('Efectos adversos: ' + e.adversos.map(x => x.t + (x.grave ? ' (grave)' : '')).join(' · '));
-      if (e.escalas && Object.keys(e.escalas).length)
-        linea('Escalas: ' + Object.entries(e.escalas).map(([k, v]) =>
-          (ESCALAS[k] || {sigla:k}).sigla + ' ' + (typeof v === 'object' ? v.total : v)).join(' · '));
+      H.push('<div class="hito">' +
+        '<div class="hito-f"><b>' + esc(fechaCorta(e.fecha)) + '</b>' +
+        (e.nrs != null ? '<span class="nrs" style="color:' + colorNRS(e.nrs) + '">' +
+          e.nrs + '<i>/10</i></span>' + barra(e.nrs * 10, colorNRS(e.nrs), 5) : '') +
+        '</div><div class="hito-c">' +
+        (e.texto ? '<p>' + esc(e.texto) + '</p>' : '') +
+        (e.cambios ? '<p class="cambio"><b>Cambios:</b> ' + esc(e.cambios) + '</p>' : '') +
+        ((e.adversos || []).length ? '<p class="adv"><b>Efectos adversos:</b> ' +
+          e.adversos.map(x => esc(x.t) + (x.grave ? ' (grave)' : '')).join(' · ') + '</p>' : '') +
+        (e.escalas && Object.keys(e.escalas).length ? '<p class="esc">' +
+          Object.entries(e.escalas).map(([k, v]) =>
+            esc((ESCALAS[k] || {sigla:k}).sigla) + ' ' +
+            esc(String(typeof v === 'object' ? v.total : v))).join(' · ') + '</p>' : '') +
+        '</div></div>');
     }
-  } else linea('—');
+    H.push('</div>');
+  } else {
+    H.push('<div class="t"><p class="vacio">Sin evoluciones registradas.</p></div>');
+  }
+
+  /* ------------------------------------- 12. resultado del plan -------- */
 
   seccion('Resultado del plan analgésico');
+  abrirTarjeta();
   if (ef.porcentaje != null) {
-    linea('Efectividad global: ' + ef.porcentaje + '% — ' + ef.banda.etiqueta);
-    for (const comp of Object.values(ef.componentes))
-      linea('· ' + comp.etiqueta + ': ' + (comp.valor > 0 ? '+' : '') + comp.valor + '%  (' + comp.detalle + ')');
-    linea(ef.resumen);
-  } else linea('Todavía sin datos suficientes para medir.');
+    H.push('<div class="efect">' +
+      '<div class="efect-n" style="color:' + ef.banda.color + '">' + ef.porcentaje +
+      '<span class="u">%</span></div>' +
+      '<div class="efect-t"><b style="color:' + ef.banda.color + '">' +
+      esc(ef.banda.etiqueta) + '</b><span>' + esc(ef.resumen) + '</span></div></div>');
+    H.push('<table class="lista"><thead><tr><th>Dominio</th><th>Aporte</th><th></th>' +
+           '<th>Detalle</th></tr></thead><tbody>');
+    for (const comp of Object.values(ef.componentes)) {
+      const col = comp.valor >= 50 ? VERDE : comp.valor >= 30 ? LIMA
+                : comp.valor >= 0 ? AMBAR : ROJO;
+      H.push('<tr><td><b>' + esc(comp.etiqueta) + '</b></td>' +
+        '<td class="num" style="color:' + col + '"><b>' + (comp.valor > 0 ? '+' : '') +
+        comp.valor + '%</b></td>' +
+        '<td class="g">' + barra(Math.abs(comp.valor), col) + '</td>' +
+        '<td class="obs">' + esc(comp.detalle) + '</td></tr>');
+    }
+    H.push('</tbody></table>');
+    if (ef.banda.accion)
+      H.push('<p class="accion">' + esc(ef.banda.accion) + '</p>');
+  } else {
+    H.push('<p class="vacio">Todavía no hay datos suficientes para medir. ' +
+      'Hace falta al menos una intensidad basal y una de control.</p>');
+  }
+  cerrarTarjeta();
+
+  /* ------------------------------------------- 13. consentimientos ----- */
 
   if ((p.consentimientos || []).length) {
     seccion('Consentimientos informados');
+    abrirTarjeta();
+    H.push('<table class="lista"><tbody>');
     for (const k of p.consentimientos)
-      linea('· ' + k.procedimiento + ' — ' + fechaCorta(k.fecha) + (k.firmado ? ' — FIRMADO' : ' — sin firmar'));
+      H.push('<tr><td><b>' + esc(k.procedimiento) + '</b></td>' +
+        '<td>' + esc(fechaCorta(k.fecha)) + '</td>' +
+        '<td>' + pastilla(k.firmado ? 'firmado' : 'sin firmar',
+                          k.firmado ? VERDE : NARANJA) + '</td></tr>');
+    H.push('</tbody></table>');
+    cerrarTarjeta();
   }
 
-  L.push('\n\n');
-  L.push('___________________________');
-  L.push('Firma y sello del médico tratante');
+  /* -------------------------------------------------------- la firma -- */
 
-  imprimirTexto('Historia clínica de dolor — ' + nombreCompleto(p), L.join('\n'));
+  H.push('<div class="firmar">' +
+    '<div class="raya"></div>' +
+    '<div class="pie-firma"><b>' + esc(MARCA.titular) + '</b><br>' +
+    esc(MARCA.matricula) + ' · ' + esc(MARCA.especialidad) + '<br>' +
+    'Firma y sello del médico tratante</div></div>');
+
+  H.push('<div class="legal">Documento generado por ' + esc(MARCA.nombre) + ' el ' +
+    esc(fechaCorta(hoy())) + '. La historia clínica es de titularidad del paciente ' +
+    '(Ley 26.529, art. 14) y está amparada por el secreto médico (Ley 17.132). ' +
+    'Contiene datos sensibles: su tratamiento se rige por la Ley 25.326.</div>');
+
+  abrirImpresion('Historia clínica de dolor — ' + nombreCompleto(p),
+                 H.join('\n'), estiloHistoriaImpresa());
+}
+
+/* La hoja de estilo del documento impreso. Va aparte de la funcion que arma
+   el contenido para que se pueda leer una cosa sin la otra. */
+function estiloHistoriaImpresa() {
+  return `
+@page{size:A4;margin:1.2cm 1.3cm}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  font-size:9.3pt; line-height:1.45; color:#141821; background:#f2f4f7;
+  -webkit-print-color-adjust:exact; print-color-adjust:exact;
+}
+.hoja{max-width:19.6cm; margin:0 auto; padding:14px}
+@media print{ body{background:#fff} .hoja{max-width:none; margin:0; padding:0} }
+
+/* ---- encabezado ---- */
+.cab{display:flex; justify-content:space-between; align-items:flex-end;
+  border-bottom:2.5px solid #2d6a72; padding-bottom:8px; margin-bottom:12px}
+.marca{font-size:17pt; font-weight:700; letter-spacing:.10em; line-height:1.1}
+.firma{font-size:8.5pt; color:#2d6a72}
+.bajada{font-size:7.6pt; color:#7d8698; margin-top:1px}
+.cab-d{text-align:right}
+.tipo{font-size:10pt; font-weight:700; color:#1d4a50; letter-spacing:.03em}
+.fecha{font-size:7.8pt; color:#7d8698}
+
+/* ---- tarjetas ---- */
+.t{background:#fff; border:1px solid #dde1e9; border-radius:9px; padding:10px 12px;
+  margin-bottom:9px; page-break-inside:avoid; break-inside:avoid}
+h2{font-size:8.4pt; font-weight:700; letter-spacing:.10em; text-transform:uppercase;
+  color:#1d4a50; margin:14px 0 6px; display:flex; align-items:center; gap:7px;
+  page-break-after:avoid; break-after:avoid}
+h2 .n{display:inline-block; width:16px; height:16px; border-radius:8px; background:#2d6a72;
+  color:#fff; font-size:7.5pt; line-height:16px; text-align:center; letter-spacing:0}
+
+/* ---- identificacion ---- */
+.ident{border-left:3px solid #2d6a72}
+.nombre{font-size:15pt; font-weight:700; letter-spacing:-.01em; line-height:1.2}
+.tira{display:flex; flex-wrap:wrap; gap:4px 16px; margin-top:5px;
+  font-size:8.4pt; color:#4a5364}
+.tira b{color:#7d8698; font-weight:600; text-transform:uppercase; font-size:7.2pt;
+  letter-spacing:.05em; margin-right:3px}
+
+/* ---- tablero de cabecera ---- */
+.tablero{display:flex; gap:9px; margin-bottom:9px; page-break-inside:avoid}
+.tablero .cel{flex:1; background:#fff; border:1px solid #dde1e9; border-radius:9px;
+  padding:9px 11px; min-width:0}
+.rot{font-size:7.2pt; font-weight:700; letter-spacing:.07em; text-transform:uppercase;
+  color:#7d8698}
+.val{font-size:20pt; font-weight:700; letter-spacing:-.03em; line-height:1.15; margin-top:1px}
+.val.chico{font-size:10.5pt; letter-spacing:0; line-height:1.3}
+.val .u{font-size:8pt; color:#7d8698; font-weight:600; margin-left:2px}
+.sub{font-size:7.6pt; color:#7d8698; margin-top:2px}
+
+/* ---- barras ---- */
+.b{display:inline-block; width:100%; min-width:34px; background:#e7eaf0; border-radius:4px;
+  overflow:hidden; vertical-align:middle}
+.b i{display:block; height:100%; border-radius:4px}
+
+/* ---- fichas de dos columnas ---- */
+table.d{width:100%; border-collapse:collapse}
+table.d th{width:26%; text-align:left; vertical-align:top; padding:3px 10px 3px 0;
+  font-size:7.4pt; font-weight:700; letter-spacing:.05em; text-transform:uppercase;
+  color:#7d8698; border-bottom:1px solid #eef0f4}
+table.d td{vertical-align:top; padding:3px 0; font-size:9pt; border-bottom:1px solid #eef0f4}
+table.d tr:last-child th, table.d tr:last-child td{border-bottom:0}
+table.d td.ancho{white-space:normal}
+.grande{font-size:11pt}
+
+/* ---- pastillas ---- */
+.p{display:inline-block; border:1px solid; border-radius:20px; padding:1px 7px;
+  font-size:7.4pt; font-weight:600; line-height:1.5; white-space:nowrap}
+.chips{margin-bottom:6px; line-height:2}
+
+/* ---- intensidades ---- */
+.intens{display:flex; gap:10px; margin-top:8px; padding-top:8px; border-top:1px solid #eef0f4}
+.intens > div{flex:1}
+.intens .v{font-size:11pt; font-weight:700; margin-top:1px}
+.intens .u{font-size:7.6pt; color:#7d8698; font-weight:600; margin-right:5px}
+
+/* ---- zonas del mapa ---- */
+table.zonas{width:100%; border-collapse:collapse; margin-top:7px}
+table.zonas td{padding:2.5px 0; border-bottom:1px solid #eef0f4; font-size:8.6pt}
+table.zonas td.z{width:46%}
+table.zonas td.i{width:12%; text-align:right; padding-right:9px; white-space:nowrap}
+table.zonas td.i .u{font-size:7.2pt; color:#7d8698}
+table.zonas td.g{width:42%}
+
+/* ---- objetivos ---- */
+table.objs{width:100%; border-collapse:collapse; margin-top:3px}
+table.objs td{padding:2.5px 0; border-bottom:1px solid #eef0f4; font-size:8.8pt}
+table.objs td.mk{width:16px; font-size:10pt}
+table.objs td.est{width:70px; text-align:right; font-size:7.4pt; font-weight:700;
+  text-transform:uppercase; letter-spacing:.04em}
+
+/* ---- listas tabulares ---- */
+table.lista{width:100%; border-collapse:collapse; font-size:8.6pt}
+table.lista thead th{text-align:left; font-size:7.2pt; font-weight:700; letter-spacing:.06em;
+  text-transform:uppercase; color:#7d8698; padding:0 8px 4px 0;
+  border-bottom:1.5px solid #dde1e9}
+table.lista td{padding:4px 8px 4px 0; border-bottom:1px solid #eef0f4; vertical-align:top}
+table.lista tbody tr:last-child td{border-bottom:0}
+table.lista td.num{text-align:right; white-space:nowrap; padding-right:9px}
+table.lista td.num .u{font-size:7.2pt; color:#7d8698}
+table.lista td.g{width:22%}
+table.lista td.obs{color:#4a5364; font-size:8.2pt}
+table.lista tr.op td{background:rgba(242,113,28,.06)}
+.gr{font-size:7.4pt; color:#7d8698}
+table.escalas td.g{width:16%}
+
+/* ---- MME ---- */
+.mme{display:flex; gap:11px; align-items:flex-start; margin-top:9px; padding:9px 11px;
+  border:1px solid; border-left-width:3px; border-radius:8px; background:#fafbfc}
+.mme-n{font-size:17pt; font-weight:700; letter-spacing:-.03em; line-height:1.1;
+  white-space:nowrap}
+.mme-n .u{font-size:7.6pt; color:#7d8698; margin-left:3px; font-weight:600}
+.mme-t{font-size:8.2pt; color:#4a5364}
+.mme-t b{display:block; font-size:9pt; color:#141821}
+.mme-t span{display:block; margin-top:2px}
+.mme-t .det{color:#7d8698; font-size:7.6pt}
+
+/* ---- alarmas ---- */
+.alarma{border-color:#f0c4c4; border-left:3px solid #d92b2b; background:#fdf3f3}
+.alarma-t{font-size:8.4pt; font-weight:700; letter-spacing:.06em; text-transform:uppercase;
+  color:#d92b2b; margin-bottom:5px}
+.reparo{border-color:#f0dcae; border-left:3px solid #d9a406; background:#fefaef}
+.reparo-t{font-size:8.4pt; font-weight:700; letter-spacing:.06em; text-transform:uppercase;
+  color:#a87f00; margin-bottom:5px}
+.linea-alarma{padding:3.5px 0; border-bottom:1px solid rgba(0,0,0,.06)}
+.linea-alarma:last-child{border-bottom:0}
+.linea-alarma b{display:block; font-size:8.8pt}
+.linea-alarma span{display:block; font-size:8.2pt; color:#4a5364}
+
+/* ---- lectura de la maquina ---- */
+.maquina{border-left:3px solid #7c5cc4; background:#fbfaff; border-color:#e2dcf3}
+.maquina-t{font-size:7.6pt; font-weight:700; letter-spacing:.07em; text-transform:uppercase;
+  color:#5b41a0; margin-bottom:4px}
+.fen{margin:0 0 7px; font-size:9.6pt; font-weight:600}
+table.dif{width:100%; border-collapse:collapse; margin-top:3px}
+table.dif td{padding:3px 8px 3px 0; border-bottom:1px solid #eef0f4; font-size:8.4pt;
+  vertical-align:middle}
+table.dif td.s{width:26%; font-weight:600}
+table.dif td.pc{width:8%; text-align:right; font-weight:700; padding-right:9px}
+table.dif td.g{width:18%}
+table.dif td.af{color:#4a5364; font-size:8pt}
+.falta{margin:7px 0 0; font-size:8pt; color:#a87f00}
+.aviso{margin:6px 0 0; font-size:7.4pt; color:#7d8698; line-height:1.4}
+
+/* ---- linea de tiempo ---- */
+.linea-tiempo{padding:11px 12px}
+.hito{display:flex; gap:12px; padding:7px 0; border-bottom:1px solid #eef0f4;
+  page-break-inside:avoid; break-inside:avoid}
+.hito:last-child{border-bottom:0}
+.hito-f{width:88px; flex:0 0 88px}
+.hito-f b{display:block; font-size:8.6pt}
+.hito-f .nrs{font-size:12pt; font-weight:700; letter-spacing:-.02em}
+.hito-f .nrs i{font-size:7.2pt; color:#7d8698; font-style:normal; font-weight:600}
+.hito-c{flex:1; min-width:0}
+.hito-c p{margin:0 0 3px; font-size:8.6pt}
+.hito-c p:last-child{margin-bottom:0}
+.hito-c .cambio{color:#1d4a50}
+.hito-c .adv{color:#d92b2b}
+.hito-c .esc{font-size:7.8pt; color:#7d8698}
+
+/* ---- efectividad ---- */
+.efect{display:flex; gap:12px; align-items:flex-start; margin-bottom:8px}
+.efect-n{font-size:26pt; font-weight:700; letter-spacing:-.04em; line-height:1;
+  white-space:nowrap}
+.efect-n .u{font-size:11pt; color:#7d8698; font-weight:600}
+.efect-t{font-size:8.4pt; color:#4a5364}
+.efect-t b{display:block; font-size:10pt}
+.accion{margin:8px 0 0; padding-top:7px; border-top:1px solid #eef0f4;
+  font-size:8.2pt; color:#4a5364}
+
+/* ---- cierres ---- */
+.vacio{margin:0; font-size:8.6pt; color:#7d8698; font-style:italic}
+.firmar{margin-top:34px; page-break-inside:avoid}
+.raya{width:7cm; border-top:1px solid #141821; margin-bottom:4px}
+.pie-firma{font-size:8.2pt; color:#4a5364; line-height:1.5}
+.pie-firma b{color:#141821; font-size:9pt}
+.legal{margin-top:16px; padding-top:8px; border-top:1px solid #dde1e9;
+  font-size:7.2pt; color:#7d8698; line-height:1.45}
+`;
+}
+
+/* Abre la ventana de impresion con un documento con estilos propios. Es el
+   hermano de imprimirTexto(), que sigue existiendo para el consentimiento
+   informado: ese es un texto legal y tiene que salir como un texto legal. */
+function abrirImpresion(titulo, cuerpoHTML, css) {
+  const v = window.open('', '_blank');
+  if (!v) return avisar('El navegador bloqueó la ventana de impresión.', 'error');
+  v.document.write('<!DOCTYPE html><html lang="es-AR"><head><meta charset="utf-8">' +
+    '<title>' + esc(titulo) + '</title><style>' + css + '</style></head><body>' +
+    '<div class="hoja">' + cuerpoHTML + '</div></body></html>');
+  v.document.close();
+  setTimeout(() => v.print(), 400);
 }
 
 
