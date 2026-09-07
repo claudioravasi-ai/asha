@@ -122,6 +122,9 @@ function ventanaBiblioteca() {
       ' técnicas con indicación, complicaciones y consentimiento', () => ventanaListaProcedimientos(), 'suave'));
     c.appendChild(superficie('Escalas', Object.keys(ESCALAS).length +
       ' instrumentos validados con sus puntos de corte', () => ventanaListaEscalas(), 'suave'));
+    c.appendChild(superficie('Glifario — protocolo',
+      'Los siete ejes, las diez figuras y los perfiles que conviene tamizar',
+      () => ventanaProtocoloGlifario(), 'suave'));
     c.appendChild(superficie('Calculadora de equivalentes de morfina',
       'Suma la carga opioide total y avisa de los umbrales', ventanaCalculadoraMME, 'suave'));
     c.appendChild(superficie('Suspensión de anticoagulantes',
@@ -215,24 +218,32 @@ function ventanaListaEscalas() {
       for (const {k, e} of ee) {
         c.appendChild(superficie(e.sigla + ' — ' + e.nombre,
           e.minutos + ' min · lo completa ' + e.quien + (e.corteClave ? ' · corte ' + e.corteClave : ''),
-          () => {
-            abrir({id:'fesc_' + k, titulo:e.sigla, sub:e.nombre, ancha:true, dibujar(cc) {
-              if (e.enunciado) cc.insertAdjacentHTML('beforeend', '<p>' + esc(e.enunciado) + '</p>');
-              if (e.regla) cc.insertAdjacentHTML('beforeend',
-                '<div class="alerta info"><b>Cómo se lee</b><p>' + esc(e.regla) + '</p></div>');
-              if (e.cortes) cc.insertAdjacentHTML('beforeend', bloque('Puntos de corte',
-                e.cortes.map(x => dato('hasta ' + x.hasta, marca(x.etiqueta, x.color) +
-                  (x.nota ? '<div class="nota" style="margin-top:4px">' + esc(x.nota) + '</div>' : ''))).join('')));
-              const items = e.items || (e.secciones || []).map(s => ({t:s}));
-              cc.insertAdjacentHTML('beforeend', bloque('Ítems',
-                '<ol style="margin:0;padding-left:20px;font-size:13.5px">' +
-                items.map(i => '<li style="margin-bottom:4px">' + esc(i.t) + '</li>').join('') + '</ol>'));
-              cc.insertAdjacentHTML('beforeend',
-                '<p class="nota" style="margin-top:12px">' + esc(e.fuente || '') + '</p>');
-            }});
-          }, 'fina'));
+          () => ventanaFichaEscala(k), 'fina'));
       }
     }
+  }});
+}
+
+/* La ficha de una escala: enunciado, como se lee, puntos de corte e items.
+   Estaba escrita adentro de la lista, y el protocolo del glifario tambien
+   necesita abrirla. Duplicarla habria dejado dos versiones de la misma
+   pantalla envejeciendo por separado. */
+function ventanaFichaEscala(k) {
+  const e = ESCALAS[k];
+  if (!e) return;
+  abrir({id:'fesc_' + k, titulo:e.sigla, sub:e.nombre, ancha:true, dibujar(cc) {
+    if (e.enunciado) cc.insertAdjacentHTML('beforeend', '<p>' + esc(e.enunciado) + '</p>');
+    if (e.regla) cc.insertAdjacentHTML('beforeend',
+      '<div class="alerta info"><b>Cómo se lee</b><p>' + esc(e.regla) + '</p></div>');
+    if (e.cortes) cc.insertAdjacentHTML('beforeend', bloque('Puntos de corte',
+      e.cortes.map(x => dato('hasta ' + x.hasta, marca(x.etiqueta, x.color) +
+        (x.nota ? '<div class="nota" style="margin-top:4px">' + esc(x.nota) + '</div>' : ''))).join('')));
+    const items = e.items || (e.secciones || []).map(s => ({t:s}));
+    cc.insertAdjacentHTML('beforeend', bloque('Ítems',
+      '<ol style="margin:0;padding-left:20px;font-size:13.5px">' +
+      items.map(i => '<li style="margin-bottom:4px">' + esc(i.t) + '</li>').join('') + '</ol>'));
+    cc.insertAdjacentHTML('beforeend',
+      '<p class="nota" style="margin-top:12px">' + esc(e.fuente || '') + '</p>');
   }});
 }
 

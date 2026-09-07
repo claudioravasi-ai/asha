@@ -27,6 +27,7 @@ JS = [
     'data-escalas.js',
     'data-mapa.js',
     'glifario.js',
+    'glifario-protocolo.js',
     'data-sindromes.js',
     'data-icd.js',
     'data-farmacos.js',
