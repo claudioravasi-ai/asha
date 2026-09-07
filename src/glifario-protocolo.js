@@ -286,7 +286,12 @@ function ventanaProtocoloGlifario(nucleoAbierto) {
       c.insertAdjacentHTML('beforeend',
         '<h3 style="font-size:15px;margin:26px 0 4px">2 · Las diez figuras</h3>' +
         '<p class="nota" style="margin-bottom:10px">Cada una desplegada por los siete ejes. ' +
-        'Tocá el título para abrirla.</p>');
+        'Tocá el título para abrirla.</p>' +
+        '<div class="alerta info" style="margin-bottom:12px"><b>La zona es la del cuadro típico, ' +
+        'no la del paciente</b><p>Donde dice «dónde suele describirse» habla del cuadro de manual. ' +
+        'La localización de una persona concreta sale del mapa corporal que marcó ella, y de ' +
+        'ningún otro lado: una Garra Isquémica marcada en el hipogastrio es una Garra Isquémica ' +
+        'en el hipogastrio.</p></div>');
 
       for (const id of Object.keys(GLIFO_NUCLEOS)) {
         const n = GLIFO_NUCLEOS[id];
@@ -306,7 +311,7 @@ function ventanaProtocoloGlifario(nucleoAbierto) {
             dato('Movimiento', esc(p.movimiento)) +
             dato('Tono y temperatura', esc(p.tono)) +
             dato('Intensidad', esc(p.intensidad)) +
-            dato('Topografía', esc(p.topografia)) +
+            dato('Dónde suele describirse', esc(p.topografia)) +
             dato('Temporalidad', esc(p.temporalidad)) +
             dato('Resonancia afectiva', esc(p.resonancia)) +
             dato('Hacia dónde mirar', '<i>' + esc(n.foco) + '</i>') +
@@ -381,9 +386,9 @@ function ventanaProtocoloGlifario(nucleoAbierto) {
    porque la puerta necesita un onclick y en esta aplicacion los onclick se
    enganchan a mano, nunca como atributo dentro del HTML.
    ------------------------------------------------------------------------- */
-function glifoBloqueMedico(nodo, g) {
+function glifoBloqueMedico(nodo, g, mapa) {
   if (!glifoCompleto(g) || !GLIFO_NUCLEOS[g.nucleo]) return;
-  nodo.insertAdjacentHTML('beforeend', glifoResumenHTML(g));
+  nodo.insertAdjacentHTML('beforeend', glifoResumenHTML(g, mapa));
   nodo.appendChild(superficie('Leer el protocolo del glifario',
     'Los siete ejes, ' + GLIFO_NUCLEOS[g.nucleo].nombre + ' en largo y qué conviene tamizar',
     () => ventanaProtocoloGlifario(g.nucleo), 'fina'));

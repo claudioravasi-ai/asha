@@ -522,7 +522,7 @@ function ventanaDolor(id) {
         '<h3 style="font-size:15px;margin:22px 0 4px">Cómo dibujó su dolor</h3>' +
         '<p class="nota" style="margin-bottom:12px">Lo contestó en el portal, antes de la ' +
         'consulta. Es su relato, no una medición: no entra en ningún cálculo.</p>');
-      glifoBloqueMedico(c, p.glifario);
+      glifoBloqueMedico(c, p.glifario, (p.dolor || {}).mapa);
     }
 
     /* ---- impacto ------------------------------------------------------ */

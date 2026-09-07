@@ -113,8 +113,16 @@ function glifoEtiqueta(dim, valor) {
 /* ------------------------------------------------------------ las figuras */
 /* Cada figura trae:
      desc        como se la describe en palabras del paciente
-     topo        donde suele aparecer (dato para el medico, no para el portal)
      foco        hacia donde mirar en la consulta (SOLO para el medico)
+
+   NO hay campo de topografia, y es a proposito. Cada figura tiene una zona
+   donde SUELE aparecer, pero eso es del cuadro tipico, no de la persona que
+   esta enfrente. Mostrarla al lado del nombre la hacia leer como si fuera de
+   este paciente: alguien marcaba el hipogastrio en el mapa, le salia la Garra
+   Isquemica, y la ficha decia "pantorrillas y tobillos". El unico lugar de
+   donde sale la topografia es el mapa corporal, que lo marca el paciente. La
+   zona tipica de cada figura vive en el protocolo, donde se lee como lo que
+   es: el cuadro de manual.
      devolucion  lo que se le dice a la persona cuando le toca esa figura
      pesos       cuantos puntos suma cada respuesta
      figura(c,g) el dibujo grande, en un lienzo de 240x240
@@ -124,7 +132,6 @@ const GLIFO_NUCLEOS = {
   liquen: {
     codigo:'LA', nombre:'El Liquen Ácido',
     desc:'una costra rugosa y porosa, como hiedra microscópica pegada a la cara interna de la piel',
-    topo:'Dérmica y subcutánea, difusa',
     foco:'Componente inflamatorio periférico. Explorar alodinia táctil, terapia tópica y modulación periférica.',
     devolucion:{
       frase:'Incluso la hiedra más tenaz cede ante la luz del amanecer. Su cuerpo guarda la memoria de batallas silenciosas, y también la capacidad de encontrar alivio en la quietud.',
@@ -140,9 +147,8 @@ const GLIFO_NUCLEOS = {
 
   pendulo: {
     codigo:'PO', nombre:'El Péndulo de Obsidiana',
-    desc:'una cuña pesada y simétrica, de bordes filosos como cristal volcánico, que se balancea adentro de la cabeza',
-    topo:'Craneal profunda',
-    foco:'Patrón cefalálgico. Evaluar profilaxis, fotofobia/fonofobia y el aislamiento sensorial que genera.',
+    desc:'una cuña pesada y simétrica, de bordes filosos como cristal volcánico, que golpea de un lado y después del otro',
+    foco:'Dolor pulsátil, sincronizado con el latido. Si marcó la cabeza, evaluar profilaxis migrañosa, fotofobia y fonofobia; en otra zona, buscar el componente vascular o inflamatorio que le da ese ritmo.',
     devolucion:{
       frase:'En medio de la tormenta y del vaivén, hay un centro quieto que la tormenta no toca. Descanse ahí: el temporal no es todo lo que usted es, y va a pasar.',
       valoracion:'Silencio adentro y refugio en la propia firmeza.'
@@ -157,7 +163,6 @@ const GLIFO_NUCLEOS = {
   malla: {
     codigo:'ME', nombre:'La Malla Eléctrica',
     desc:'una red de pesca metálica, tensa, con los nudos electrificados, tendida justo debajo de la piel',
-    topo:'Territorio de nervio periférico, con predominio distal',
     foco:'Patrón sugerente de componente neuropático. Cotejar con el DN4 y con el mapa corporal.',
     devolucion:{
       frase:'Cada chispa que su cuerpo registra es también una señal de que está vivo y buscando armonía. Puede darse permiso para bajar el escudo y descansar.',
@@ -176,7 +181,6 @@ const GLIFO_NUCLEOS = {
   cemento: {
     codigo:'CI', nombre:'El Cemento Intraóseo',
     desc:'un bloque macizo, compactado a presión adentro del hueso, que no deja lugar para nada más',
-    topo:'Huesos largos o cuerpos vertebrales',
     foco:'Dolor profundo, sordo y continuo. Considerar sensibilización central y reprocesamiento somatosensorial.',
     devolucion:{
       frase:'Bajo la roca más firme late la fuerza vieja de la tierra. Su esqueleto viene sosteniendo una historia larga: hoy puede soltar el aire y apoyarse.',
@@ -193,9 +197,8 @@ const GLIFO_NUCLEOS = {
 
   tornillo: {
     codigo:'TV', nombre:'El Tornillo Visceral',
-    desc:'una espiral de metal oxidado que atraviesa el centro del cuerpo y lo va retorciendo',
-    topo:'Abdominal, mesogástrica e hipogástrica',
-    foco:'Sospecha de componente visceral. Revisar ritmo digestivo, relación con las comidas y bloqueos simpáticos.',
+    desc:'una espiral de metal oxidado que retuerce por dentro, despacio y sin aflojar',
+    foco:'Si la zona marcada es abdominal o pélvica, sospechar componente visceral: revisar ritmo digestivo, relación con las comidas y bloqueos simpáticos.',
     devolucion:{
       frase:'Su centro es un lugar que merece suavidad. Así como el río va modelando la piedra sin apuro, su cuerpo busca su propio cauce de calma.',
       valoracion:'Fluidez adentro y paz con el ritmo del cuerpo.'
@@ -209,7 +212,6 @@ const GLIFO_NUCLEOS = {
   lluvia: {
     codigo:'LL', nombre:'La Lluvia de Alfileres',
     desc:'millones de alfileres calientes y finísimos que caen todos juntos sobre una superficie grande del cuerpo',
-    topo:'Distribución amplia y bastante simétrica',
     foco:'Patrón difuso y extenso. Descartar sensibilización central; revisar sueño, ánimo y umbral al roce.',
     devolucion:{
       frase:'Su sensibilidad al mundo habla de alguien despierto, no de alguien roto. Que cada roce liviano pueda volverse, de a poco, una caricia y no una alarma.',
@@ -225,8 +227,7 @@ const GLIFO_NUCLEOS = {
   garra: {
     codigo:'GI', nombre:'La Garra Isquémica',
     desc:'una mano rígida que abraza con fuerza un vaso de sangre y no lo suelta, y deja todo frío del otro lado',
-    topo:'Pantorrillas, tobillos y porción distal de los miembros',
-    foco:'Componente vascular o autonómico. Evaluar pulsos, color, temperatura y relación con la marcha.',
+    foco:'Componente vascular o autonómico. Evaluar la perfusión en la zona que marcó —pulsos, color, temperatura— y si se desencadena con el esfuerzo.',
     devolucion:{
       frase:'La fuerza de verdad no está en apretar sin descanso, sino en animarse a aflojar las manos. Su movilidad se renueva también en las pausas.',
       valoracion:'Esperanza en el movimiento y perdón para los propios límites.'
@@ -241,7 +242,6 @@ const GLIFO_NUCLEOS = {
   vacio: {
     codigo:'VC', nombre:'El Vacío',
     desc:'un hueco, una ausencia con forma: falta algo justo donde debería haber cuerpo',
-    topo:'Segmento con déficit sensitivo, anestesiado o amputado',
     foco:'Sensación de ausencia o miembro fantasma. Considerar terapia de espejo e integración somatosensorial.',
     devolucion:{
       frase:'Lo que hoy se siente como ausencia es también un espacio abierto. Usted no está incompleto: lo que lo hace usted no se perdió en ese hueco.',
@@ -256,7 +256,6 @@ const GLIFO_NUCLEOS = {
   placa: {
     codigo:'PC', nombre:'La Placa de Cuarzo',
     desc:'una losa dura, sin nada de elasticidad, encajada a la fuerza entre dos partes que deberían moverse',
-    topo:'Columna lumbar baja o cervical media',
     foco:'Patrón mecánico y de rigidez. Fisiokinesia, higiene postural y trabajo sobre el miedo al movimiento.',
     devolucion:{
       frase:'La rigidez afloja cuando el cuerpo se siente escuchado. Permítase la flexibilidad de tratarse con compasión: cada articulación guarda el movimiento que todavía es posible.',
@@ -273,7 +272,6 @@ const GLIFO_NUCLEOS = {
   latigazo: {
     codigo:'LS', nombre:'El Latigazo de Sílice',
     desc:'un hilo finísimo de vidrio templado que restalla de golpe, sin aviso, y después desaparece',
-    topo:'Trayecto de un nervio, con frecuencia en la cara',
     foco:'Patrón paroxístico tipo neuralgia. Indagar zonas gatillo y anticonvulsivantes específicos.',
     devolucion:{
       frase:'Ante el rayo que llega sin avisar, su respiración es el ancla que lo trae de vuelta. El coraje con que enfrenta cada episodio dice mucho de usted.',
@@ -421,21 +419,40 @@ function glifoTitularHTML(g) {
 /* El detalle queda plegado debajo del titular. La mayoría de las veces con
    el nombre de la figura alcanza; el dia que no alcanza, esta todo aca y no
    hay que ir a buscarlo a otra pantalla. */
-function glifoResumenHTML(g) {
+function glifoResumenHTML(g, mapa) {
   if (!glifoCompleto(g) || !GLIFO_NUCLEOS[g.nucleo]) return '';
   const n = GLIFO_NUCLEOS[g.nucleo];
+
+  /* Donde duele NO lo dice la figura: lo dice el mapa que marco el paciente.
+     Aca se muestra ese, y solo ese. Si el mapa esta vacio, no se inventa una
+     zona probable: se dice que falta. */
+  const zonas = glifoZonasMarcadas(mapa);
 
   return glifoTitularHTML(g) +
     '<details class="plegable"><summary><span class="plegable-t">' +
     'Cómo llegó a esa figura</span></summary><div class="plegable-c">' +
       dato('Respuestas del paciente', GLIFO_DIMENSIONES.map(d =>
         marca(glifoEtiqueta(d.id, g.respuestas[d.id]), 'neutro')).join(' ')) +
-      dato('Topografía típica', esc(n.topo)) +
+      dato('Dónde lo marcó', zonas ||
+        '<span class="nota">Todavía no marcó el mapa corporal.</span>') +
       dato('Hacia dónde mirar', '<i>' + esc(n.foco) + '</i>') +
       '<p class="nota" style="margin-top:8px">Orientación del glifario a partir de seis ' +
-      'respuestas, no un diagnóstico ni una indicación. El paciente no ve este renglón: ' +
-      'de su lado solo hay una devolución de acompañamiento.</p>' +
+      'respuestas, no un diagnóstico ni una indicación. <b>La figura no dice dónde duele</b>: ' +
+      'la localización sale del mapa corporal y de ningún otro lado. El paciente no ve este ' +
+      'renglón: de su lado solo hay una devolución de acompañamiento.</p>' +
     '</div></details>';
+}
+
+/* Las zonas que el paciente marco, en una linea. Se apoya en leerMapa(), que
+   es el mismo lector que usa el resto de la aplicacion: si manana cambia como
+   se nombra una zona, cambia en un solo lugar. */
+function glifoZonasMarcadas(mapa) {
+  if (!Array.isArray(mapa) || !mapa.length) return '';
+  const l = leerMapa(mapa);
+  if (!l || !l.total) return '';
+  const lista = l.zonas.slice(0, 6).map(z => esc(nombreZona(z.z)) + ' <b>' + z.i + '</b>');
+  return lista.join(' · ') + (l.zonas.length > 6 ? ' <span class="nota">y ' +
+    (l.zonas.length - 6) + ' zona(s) más</span>' : '');
 }
 
 /* ---------------------------------------------------------------- modal - */

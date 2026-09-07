@@ -456,7 +456,7 @@ function ventanaVerPrecarga(token) {
          Lo unico que va todavia mas arriba son las banderas rojas, y eso no se
          toca: ninguna figura del glifario vale mas que un paciente que marco
          perdida de peso y fiebre. */
-      if (glifoCompleto(d.glifario)) glifoBloqueMedico(c, d.glifario);
+      if (glifoCompleto(d.glifario)) glifoBloqueMedico(c, d.glifario, d.mapa);
 
       c.appendChild(superficie('Tomar en consulta',
         'Crea la historia clínica con todo esto ya cargado y la abre', () => {
