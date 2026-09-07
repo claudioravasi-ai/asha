@@ -585,7 +585,7 @@ function imprimirHistoria(id) {
   /* ------------------------------------------------------ encabezado --- */
 
   H.push('<div class="cab">' +
-    '<div class="cab-i"><div class="marca">' + esc(MARCA.nombre) + '</div>' +
+    '<div class="cab-i"><div class="marca">' + logoImg() + esc(MARCA.nombre) + '</div>' +
     (MARCA.firma ? '<div class="firma">' + esc(MARCA.firma) + '</div>' : '') +
     '<div class="bajada">' + esc(MARCA.consultorio) + ' · ' + esc(MARCA.ciudad) + '</div></div>' +
     '<div class="cab-d"><div class="tipo">Historia clínica de dolor</div>' +
@@ -1034,6 +1034,7 @@ body{
 .cab{display:flex; justify-content:space-between; align-items:flex-end;
   border-bottom:2.5px solid #2d6a72; padding-bottom:8px; margin-bottom:12px}
 .marca{font-size:17pt; font-weight:700; letter-spacing:.10em; line-height:1.1}
+.marca img{height:1em; width:auto; vertical-align:-.12em; margin-right:.3em}
 .firma{font-size:8.5pt; color:#2d6a72}
 .bajada{font-size:7.6pt; color:#7d8698; margin-top:1px}
 .cab-d{text-align:right}

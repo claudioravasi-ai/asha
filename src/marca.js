@@ -25,7 +25,14 @@ const MARCA = {
   telefono:    '-',
   whatsapp:    '542901419044',                         // con codigo de pais, sin espacios
   email:       'mmpevere1@gmail.com',
-  ciudad:      'Ushuaia-AeIAS-Argentina'
+  ciudad:      'Ushuaia-AeIAS-Argentina',
+
+  /* Direccion publica de la aplicacion, CON la barra final. La usan los
+     correos para ir a buscar el logo: adentro de un mail no se puede mandar
+     el dibujo incrustado (ver logoDeCorreo en ui-ventanas.js). Si algun dia
+     la aplicacion se muda de hosting, se cambia aca y los correos siguen
+     saliendo con el logo. */
+  sitio:       'https://claudioravasi-ai.github.io/asha/'
 };
 
 /* Texto legal al pie de todo lo que sale de la aplicacion hacia el paciente.

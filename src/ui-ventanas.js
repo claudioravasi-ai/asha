@@ -13,7 +13,7 @@
    navegacion, y por eso no hace falta ningun menu.
 
    Una ventana se declara asi:
-     {id, titulo, sub, ancha, ctx, dibujar(cuerpo, ctx)}
+     {id, titulo, sub, ancha, logo, ctx, dibujar(cuerpo, ctx)}
    donde dibujar() recibe el nodo del cuerpo y lo llena. Si la ventana
    necesita rehacerse cuando cambian los datos, no guarda nada: se vuelve a
    llamar a dibujar() y listo.
@@ -97,7 +97,7 @@ function pintarPila() {
     const vent = document.createElement('section');
     vent.className = 'ventana' + (v.ancha ? ' ancha' : '');
     vent.innerHTML =
-      '<header><div><h2>' + esc(v.titulo) + '</h2>' +
+      '<header><div><h2>' + (v.logo ? logoImg() : '') + esc(v.titulo) + '</h2>' +
       (v.sub ? '<div class="sub">' + esc(v.sub) + '</div>' : '') +
       '</div><div class="espacio"></div>' +
       (i > 0 ? '<button class="cerrar" title="Cerrar esta ventana">✕</button>' : '') +
@@ -135,6 +135,47 @@ function errorEnVentana(cuerpo, e) {
    ========================================================================= */
 
 /* Superficie tocable: reemplaza al boton. */
+/* =========================================================================
+   LA MARCA
+   -------------------------------------------------------------------------
+   El logo viaja incrustado en el index.html, en base64 (lo pone build.py a
+   partir de icons/logo-chico.png). Si por lo que sea no viajo, las dos
+   funciones devuelven el nombre solo: mejor eso que un icono roto.
+   ========================================================================= */
+
+/* El logo suelto, para meterlo adelante de un titulo que ya tiene su propio
+   tamaño. Se dimensiona en el CSS de quien lo usa, en em, para que siga a la
+   letra que tenga al lado. */
+function logoImg(clase) {
+  if (!window.MARCA_LOGO) return '';
+  return '<img src="' + MARCA_LOGO + '" alt=""' +
+         (clase ? ' class="' + clase + '"' : '') + '>';
+}
+
+/* El nombre con el logo delante, centrado: las pantallas de entrada y la
+   cabecera del portal del paciente. */
+function marcaConLogo(tam, espaciado) {
+  return '<div class="marca-portada" style="font-size:' + tam + 'px;' +
+         'letter-spacing:' + (espaciado || '.07em') + '">' + logoImg() +
+         '<span>' + esc(MARCA.nombre) + '</span></div>';
+}
+
+/* El logo para los CORREOS. Ahi no sirve el dibujo incrustado: Gmail y
+   Outlook no muestran las imagenes en base64 y, en lugar del logo, al
+   paciente le queda el cuadradito roto. Se lo pide al sitio publicado, que es
+   una direccion que cualquier cliente de correo sabe abrir. El ancho sale del
+   alto, porque el dibujo mide 106 por 128, y va tambien en atributos width y
+   height: hay clientes que no leen el style. */
+function logoDeCorreo(alto) {
+  if (!MARCA.sitio) return '';
+  const ancho = Math.round(alto * 106 / 128);
+  return '<img src="' + MARCA.sitio + 'icons/logo-chico.png" alt="" ' +
+         'width="' + ancho + '" height="' + alto + '" ' +
+         'style="width:' + ancho + 'px;height:' + alto + 'px;border:0;' +
+         'vertical-align:-' + Math.round(alto * .17) + 'px;' +
+         'margin-right:' + Math.round(alto * .3) + 'px">';
+}
+
 function superficie(titulo, detalle, alTocar, clase) {
   const n = document.createElement('div');
   n.className = 'superficie' + (clase ? ' ' + clase : '');

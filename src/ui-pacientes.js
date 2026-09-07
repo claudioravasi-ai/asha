@@ -10,7 +10,7 @@
 
 function ventanaInicio() {
   abrir({
-    id:'inicio', titulo:MARCA.nombre, sub:MARCA.bajada, ancha:true,
+    id:'inicio', titulo:MARCA.nombre, sub:MARCA.bajada, ancha:true, logo:true,
     dibujar(c) {
       const pacientes = pacientesReales();
       const precargas = Object.values(ESTADO.precargas);

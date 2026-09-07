@@ -13,16 +13,6 @@
    ========================================================================= */
 'use strict';
 
-/* El nombre con el logo delante, para las pantallas de entrada. El dibujo
-   viaja incrustado en el index.html (ver build.py); si por lo que sea no
-   esta, queda el nombre solo y no se rompe nada. */
-function marcaConLogo(tam, espaciado) {
-  return '<div class="marca-portada" style="font-size:' + tam + 'px;' +
-         'letter-spacing:' + (espaciado || '.07em') + '">' +
-         (window.MARCA_LOGO ? '<img src="' + MARCA_LOGO + '" alt="">' : '') +
-         '<span>' + esc(MARCA.nombre) + '</span></div>';
-}
-
 function pantallaEntrada() {
   document.body.innerHTML =
     '<div id="app"><div class="lienzo portada">' +

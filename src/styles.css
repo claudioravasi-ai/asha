@@ -69,6 +69,11 @@ input,select,textarea,button{font:inherit; color:inherit}
   border-bottom:1px solid var(--linea); flex:0 0 auto; z-index:40;
 }
 .marca{display:flex; align-items:baseline; gap:9px; cursor:pointer; user-select:none}
+/* El logo va a la altura del nombre. Se saca del alineado por linea de base
+   —una imagen no tiene—, se centra sola y se le da su propio margen, mas
+   corto que los 9px que separan al nombre de la firma: el dibujo es parte
+   del nombre, no otra palabra. */
+.marca img{height:19px; width:auto; flex:0 0 auto; align-self:center; margin-right:-3px}
 .marca b{font-size:17px; letter-spacing:.06em; font-weight:700}
 .marca span{font-size:11.5px; color:var(--tinta-3); letter-spacing:.02em}
 .marca #marcaFirma{color:var(--acento); font-weight:500}
@@ -192,6 +197,8 @@ input,select,textarea,button{font:inherit; color:inherit}
   display:flex; align-items:flex-start; gap:12px; flex:0 0 auto;
 }
 .ventana > header h2{font-size:17px; line-height:1.25}
+/* el logo delante del titulo de una ventana (hoy solo la de inicio) */
+.ventana > header h2 img{height:1em; width:auto; vertical-align:-.14em; margin-right:.34em}
 .ventana > header .sub{font-size:12.5px; color:var(--tinta-3); margin-top:2px}
 .ventana > header .espacio{flex:1}
 

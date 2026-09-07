@@ -108,7 +108,13 @@ def main():
     # marcador y se completa despues por JavaScript, durante una centesima de
     # segundo se ve el nombre anterior y despues cambia: un parpadeo feo y
     # evitable.
-    cuerpo = (cuerpo.replace('{{MARCA_NOMBRE}}', nombre)
+    # La barra superior tambien lleva el logo escrito de entrada, por lo mismo
+    # que el nombre: puesto despues por JavaScript aparecia de golpe con la
+    # pagina ya dibujada. Si no hay logo se reemplaza por nada, y no queda un
+    # <img> sin origen pidiendo la pagina entera de vuelta.
+    cuerpo = (cuerpo.replace('{{MARCA_LOGO}}',
+                    '<img id="marcaLogo" src="%s" alt="">' % logo if logo else '')
+                    .replace('{{MARCA_NOMBRE}}', nombre)
                     .replace('{{MARCA_FIRMA}}', firma)
                     .replace('{{MARCA_BAJADA}}', bajada)
                     # La version tambien va escrita en el HTML, no puesta por

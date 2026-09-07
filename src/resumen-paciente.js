@@ -404,7 +404,7 @@ function resumenHTML(r, enPantalla) {
     'style="border-collapse:separate;width:100%;margin-bottom:16px"><tr>' +
     '<td style="background:' + C.acento + ';border-radius:14px;padding:20px 22px">' +
     '<div style="font-size:23px;font-weight:700;letter-spacing:.10em;color:#ffffff;' +
-    'line-height:1.2">' + esc(MARCA.nombre) + '</div>' +
+    'line-height:1.2">' + logoDeCorreo(25) + esc(MARCA.nombre) + '</div>' +
     (MARCA.firma ? '<div style="font-size:13px;color:#cfe6e8;margin-top:3px">' +
       esc(MARCA.firma) + '</div>' : '') +
     '<div style="font-size:12px;color:#a8ced2;margin-top:2px;letter-spacing:.03em">' +

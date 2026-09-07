@@ -39,7 +39,8 @@ function enviarEnlacePorMail(email, enlace, dni) {
   const cuerpo =
 '<div style="font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;' +
 'max-width:560px;margin:0 auto;color:#141821;line-height:1.55">' +
-'<h2 style="margin:0 0 4px;letter-spacing:.06em">' + esc(MARCA.nombre) + '</h2>' +
+'<h2 style="margin:0 0 4px;letter-spacing:.06em">' + logoDeCorreo(24) +
+  esc(MARCA.nombre) + '</h2>' +
 '<p style="margin:0 0 22px;color:#828b9c;font-size:13px">' + esc(MARCA.bajada) + '</p>' +
 '<p>Recibimos su solicitud para completar el cuestionario previo a la consulta.</p>' +
 '<p style="margin:24px 0"><a href="' + enlace + '" ' +
@@ -80,7 +81,8 @@ function enviarDireccionDelPortal(email, url, mensaje) {
   const cuerpo =
 '<div style="font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;' +
 'max-width:560px;margin:0 auto;color:#141821;line-height:1.55">' +
-'<h2 style="margin:0 0 4px;letter-spacing:.06em">' + esc(MARCA.nombre) + '</h2>' +
+'<h2 style="margin:0 0 4px;letter-spacing:.06em">' + logoDeCorreo(24) +
+  esc(MARCA.nombre) + '</h2>' +
 '<p style="margin:0 0 22px;color:#828b9c;font-size:13px">' + esc(MARCA.bajada) + '</p>' +
 (mensaje ? '<p>' + esc(mensaje).replace(/\n/g, '<br>') + '</p>'
          : '<p>Le acercamos la dirección del cuestionario previo a la consulta. ' +

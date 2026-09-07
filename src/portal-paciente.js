@@ -44,7 +44,7 @@ let GLIFARIO_OFRECIDO = false;
 /* Encabezado unico del portal. Estaba repetido en cuatro pantallas y en una
    de ellas faltaba la firma; con una sola funcion eso no puede volver a pasar. */
 function cabezaPortal(bajada) {
-  return '<div class="portal-cabeza"><b>' + esc(MARCA.nombre) + '</b>' +
+  return '<div class="portal-cabeza">' + marcaConLogo(22, '.08em') +
     (MARCA.firma ? '<span style="color:var(--acento);display:block">' +
       esc(MARCA.firma) + '</span>' : '') +
     (bajada ? '<span>' + esc(bajada) + '</span>' : '') + '</div>';
