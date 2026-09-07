@@ -247,33 +247,14 @@ function ventanaInvitar() {
    REGISTRO DESDE LA APLICACION
    ========================================================================= */
 
-/* -------------------------------------------------------------------------
-   Marca publica de instalacion.
+/* La marca publica de instalacion.
 
    Quien todavia no tiene cuenta NO puede leer /dolor/equipo: las reglas se lo
-   impiden, y esta bien que asi sea. Pero entonces la pantalla de registro no
-   tiene forma de saber si el consultorio ya tiene titular, y creia siempre
-   que estaba vacio: le ofrecia a cualquiera el alta de titular, aunque la
-   base despues se lo rechazara.
-
-   Por eso hay un unico dato PUBLICO en toda la base: un si o un no que dice
-   "este consultorio ya esta instalado". No revela nada —ni quien es, ni
-   cuantos son, ni ningun correo— y es lo que permite que la pantalla diga la
-   verdad antes de pedir nada.
-   ------------------------------------------------------------------------- */
-function consultarInstalado() {
-  /* En modo local no hay equipo ni nube: se comporta como recien instalado. */
-  if (!fbDb) return Promise.resolve(false);
-  return fbDb.ref('dolor/publico/instalado').once('value')
-    .then(s => s.val() === true)
-    .catch(() => true);   /* ante la duda, se exige codigo */
-}
-
-/* La marca de instalado se escribe al crear la primera cuenta. Pero los
-   consultorios que ya tenian titular ANTES de que existiera esa marca se
-   quedaron sin ella, y entonces la pantalla de registro seguia ofreciendo el
-   alta de titular a cualquiera. Se repara sola: cuando entra un titular y la
-   marca no esta, se pone. Una vez, en silencio, y no vuelve a pasar. */
+   impiden, y esta bien que asi sea. Por eso hay un unico dato PUBLICO en toda
+   la base: un si o un no que dice "este consultorio ya esta instalado". No
+   revela nada —ni quien es el titular, ni cuantos son, ni ningun correo—.
+   Hoy lo unico que lo lee es el diagnostico de Ajustes; se sigue escribiendo
+   para que ese diagnostico diga la verdad. */
 function marcarInstalado(miembro) {
   if (!fbDb || !miembro || miembro.rol !== 'titular') return;
   fbDb.ref('dolor/publico/instalado').once('value')
@@ -281,52 +262,39 @@ function marcarInstalado(miembro) {
     .catch(() => {});
 }
 
-/* La pantalla de registro pide SIEMPRE el codigo de invitacion, y solo ofrece
-   el alta de titular cuando alguien la pide expresamente.
+/* La pantalla de registro pide SIEMPRE el codigo de invitacion.
 
-   Antes era al reves: consultaba la marca de instalado y, si no estaba,
-   ofrecia el alta de titular. El problema es que "la marca no esta" no
-   significa "no hay titular": significa que no se pudo leer, o que se
-   escribio con una version anterior, o que las reglas la bloquean. Frente a
-   la duda, la pantalla se comportaba de la manera mas permisiva, que es
-   justo la que no corresponde.
-
-   Ahora la duda se resuelve al reves y quien manda es la base: si alguien
-   fuerza el alta de titular con un titular ya existente, las reglas la
-   rechazan y se le dice por que. */
+   Hubo una segunda puerta, "crear la cuenta de titular", para la primera
+   cuenta del consultorio, cuando todavia no habia nadie que pudiera emitir un
+   codigo. Ya no: el titular existe y es uno solo, asi que la puerta no abria
+   nada —las reglas rechazaban el alta— y lo unico que hacia era ofrecerle a
+   quien llegaba un camino que terminaba en un error. Si algun dia hiciera
+   falta volver a arrancar de cero, la primera cuenta se da de alta desde la
+   consola de Firebase, que es donde corresponde. */
 function pantallaRegistro() {
   const c = $('#entrada');
   if (!c) return;
-  dibujarRegistro(c, true);
+  dibujarRegistro(c);
 }
 
-function dibujarRegistro(c, instalado) {
+function dibujarRegistro(c) {
   c.innerHTML =
     '<div style="text-align:center;padding:10px 0 18px">' +
-    '<div style="font-size:20px;font-weight:700;letter-spacing:.07em">' + esc(MARCA.nombre) + '</div>' +
+    marcaConLogo(20) +
     '<div class="nota">Crear mi cuenta</div></div>';
 
-  /* La salida va ARRIBA: en la pantalla anterior estaba al final de un texto
-     largo y quien entraba por error no encontraba como volver. */
+  /* La salida va ARRIBA, y una sola vez: antes estaba al final de un texto
+     largo y quien entraba por error no encontraba como volver; repetirla
+     abajo obligaria a leer las dos para descubrir que no habia que elegir
+     nada. */
   c.appendChild(superficie('◀ Volver', null, pantallaEntrada, 'fina'));
 
   const d = {email:'', clave:'', clave2:'', codigo:'', nombre:''};
-  const equipoVacio = !instalado;   // true solo si se pidio el alta de titular
 
-  if (equipoVacio) {
-    c.insertAdjacentHTML('beforeend',
-      '<div class="alerta medio"><b>Alta de titular</b>' +
-      '<p>Esto solo funciona si el consultorio <b>todavía no tiene ninguna cuenta</b>. ' +
-      'Si ya hay un titular, la base va a rechazar el alta y hay que pedirle un código ' +
-      'de invitación.</p></div>');
-    c.appendChild(superficie('Tengo un código de invitación', null,
-      () => dibujarRegistro(c, true), 'fina'));
-  } else {
-    campo(c, 'Código de invitación', d, 'codigo',
-      {pista:'XXXX-XXXX-XXXX-XXXX',
-       ayuda:'Con el código de invitación que te dio el titular. Se escribe con guiones, ' +
-             'como te lo pasaron.'});
-  }
+  campo(c, 'Código de invitación', d, 'codigo',
+    {pista:'XXXX-XXXX-XXXX-XXXX',
+     ayuda:'Con el código de invitación que te dio el titular. Se escribe con guiones, ' +
+           'como te lo pasaron.'});
 
   campo(c, 'Nombre y apellido', d, 'nombre');
   campo(c, 'Correo', d, 'email', {tipo:'email'});
@@ -344,15 +312,13 @@ function dibujarRegistro(c, instalado) {
     const cod = (d.codigo || '').trim().toUpperCase();
 
     const seguir = invitacion => {
-      if (!equipoVacio) {
-        if (!invitacion)
-          return avisar('Ese código de invitación no existe.', 'error');
-        if (invitacion.usada)
-          return avisar('Ese código ya fue usado. Pedí uno nuevo.', 'error');
-        if (String(invitacion.email).toLowerCase() !== email)
-          return avisar('El código fue emitido para otro correo (' +
-                        invitacion.email + '). Registrate con ese.', 'error');
-      }
+      if (!invitacion)
+        return avisar('Ese código de invitación no existe.', 'error');
+      if (invitacion.usada)
+        return avisar('Ese código ya fue usado. Pedí uno nuevo.', 'error');
+      if (String(invitacion.email).toLowerCase() !== email)
+        return avisar('El código fue emitido para otro correo (' +
+                      invitacion.email + '). Registrate con ese.', 'error');
 
       /* Se marca que hay un alta en curso para que la vigilancia de sesion no
          mire el equipo antes de que el registro exista. Ver ui-auth.js. */
@@ -363,23 +329,15 @@ function dibujarRegistro(c, instalado) {
           const uid = cred.user.uid;
           const miembro = {
             uid, email, nombre:d.nombre.trim(),
-            rol: equipoVacio ? 'titular' : invitacion.rol,
+            rol: invitacion.rol,
             alta: ahora(),
-            codigo: equipoVacio ? '' : cod
+            codigo: cod
           };
           return fbDb.ref('dolor/equipo/' + uid).set(miembro)
+            .then(() => fbDb.ref('dolor/invitaciones/' + cod)
+                            .update({usada:true, usadaEn:ahora(), usadaPor:uid}))
             .then(() => {
-              if (!equipoVacio) {
-                return fbDb.ref('dolor/invitaciones/' + cod)
-                  .update({usada:true, usadaEn:ahora(), usadaPor:uid});
-              }
-              /* Primera cuenta: se cierra la puerta para el que venga despues. */
-              return fbDb.ref('dolor/publico/instalado').set(true);
-            })
-            .then(() => {
-              avisar(equipoVacio
-                ? 'Cuenta de titular creada. Ya podés invitar al resto desde Ajustes → Equipo.'
-                : 'Cuenta creada. Bienvenido.', 'ok', 8000);
+              avisar('Cuenta creada. Bienvenido.', 'ok', 8000);
               /* Recien ahora el registro existe: se libera la vigilancia y se
                  la vuelve a disparar para que entre con el rol ya cargado. */
               window.REGISTRANDO = false;
@@ -396,12 +354,9 @@ function dibujarRegistro(c, instalado) {
             'auth/operation-not-allowed':'El registro por correo no está habilitado en ' +
               'Firebase. Hay que activarlo en Authentication → Sign-in method.',
             'auth/network-request-failed':'Sin conexión a internet.',
-            'PERMISSION_DENIED': equipoVacio
-              ? 'La base rechazó el alta de titular: este consultorio YA tiene una cuenta. ' +
-                'Pedile al titular un código de invitación.'
-              : 'La base rechazó el alta. Puede ser que el código ya se haya usado, que ' +
-                'sea para otro correo, o que las reglas de reglas-firebase.txt no estén ' +
-                'publicadas.'
+            'PERMISSION_DENIED':'La base rechazó el alta. Puede ser que el código ya se haya ' +
+              'usado, que sea para otro correo, o que las reglas de reglas-firebase.txt no ' +
+              'estén publicadas.'
           }[e.code] || e.message;
           avisar(m, 'error', 9000);
           /* Si la cuenta de Firebase llego a crearse pero el alta en el equipo
@@ -412,37 +367,23 @@ function dibujarRegistro(c, instalado) {
         });
     };
 
-    if (equipoVacio) return seguir(null);
     fbDb.ref('dolor/invitaciones/' + cod).once('value')
       .then(s => seguir(s.val()))
       .catch(() => avisar('No se pudo verificar el código. ¿Hay internet?', 'error'));
   }, 'acento'));
-
-  /* La salida esta arriba y no se repite: dos superficies que hacen lo mismo
-     en la misma pantalla obligan a leer las dos para descubrir que no habia
-     que elegir nada. */
-  if (!equipoVacio) {
-    c.insertAdjacentHTML('beforeend',
-      '<p class="nota" style="margin-top:16px;padding-top:12px;' +
-      'border-top:1px solid var(--linea)">¿Sos el titular y el consultorio todavía no ' +
-      'tiene ninguna cuenta? Esa primera cuenta se crea sin código.</p>');
-    c.appendChild(superficie('Crear la cuenta de titular',
-      'Solo la primera vez, cuando no hay ninguna otra cuenta',
-      () => dibujarRegistro(c, false), 'fina'));
-  }
 }
 
 /* Pantalla que ve alguien que tiene cuenta pero no pertenece al equipo.
    Sin esto, veria una aplicacion vacia y creeria que se perdieron los datos. */
 function pantallaSinAcceso() {
   document.body.innerHTML =
-    '<div id="app"><div class="lienzo" style="align-items:center;justify-content:center">' +
+    '<div id="app"><div class="lienzo portada">' +
     '<section class="ventana" style="max-width:460px;flex:0 1 460px">' +
     '<div class="cuerpo" id="entrada"></div></section></div></div><div id="avisos"></div>';
   const c = $('#entrada');
   c.innerHTML =
     '<div style="text-align:center;padding:10px 0 18px">' +
-    '<div style="font-size:20px;font-weight:700;letter-spacing:.07em">' + esc(MARCA.nombre) + '</div>' +
+    marcaConLogo(20) +
     '</div>' +
     '<div class="alerta alto"><b>Tu cuenta no pertenece a este consultorio</b>' +
     '<p>Entraste con <b>' + esc((ESTADO.usuario || {}).email || '') + '</b>, pero esa cuenta ' +

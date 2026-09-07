@@ -15,7 +15,7 @@
    Ahora el documento HTML se pide SIEMPRE con cache:'reload', que obliga a
    ir hasta el servidor. El resto de los archivos si puede usar el cache: son
    los iconos y el manifiesto, que casi nunca cambian. */
-const CACHE = 'asha-v2';
+const CACHE = 'asha-v3';
 const ARCHIVOS = ['./', './index.html', './manifest.webmanifest'];
 
 self.addEventListener('install', e => {

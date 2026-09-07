@@ -132,6 +132,29 @@ input,select,textarea,button{font:inherit; color:inherit}
   justify-content:safe center;
 }
 
+/* Las pantallas que todavia no son la aplicacion —entrar, crear la cuenta,
+   "tu cuenta no pertenece"— muestran una sola tarjeta centrada. Centrarla no
+   alcanza: cuando el formulario es mas alto que la ventana del navegador (el
+   de crear la cuenta tiene seis campos) la tarjeta se sale por arriba y por
+   abajo, y lo que queda afuera no se puede alcanzar, porque el lienzo no
+   desplaza. Limitarla a la altura disponible le devuelve el desplazamiento al
+   cuerpo de la tarjeta, que si lo tiene. El "safe", igual que en el centrado
+   horizontal, evita que el recorte se coma el principio. */
+.lienzo.portada{
+  align-items:safe center; justify-content:safe center;
+  overflow-y:auto; overscroll-behavior:contain;
+}
+.lienzo.portada > .ventana{max-height:100%}
+
+/* el logo al lado del nombre, en esas mismas pantallas. Va a la altura de la
+   palabra: 1em de dibujo, porque make-icons.py le saca el aire de los bordes
+   antes de guardarlo. */
+.marca-portada{
+  display:flex; align-items:center; justify-content:center; gap:.34em;
+  font-weight:700;
+}
+.marca-portada img{height:1em; width:auto; display:block; flex:0 0 auto}
+
 .lomo{
   flex:0 0 46px;
   background:var(--ventana); border:1px solid var(--linea);

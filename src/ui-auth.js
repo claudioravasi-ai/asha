@@ -13,9 +13,19 @@
    ========================================================================= */
 'use strict';
 
+/* El nombre con el logo delante, para las pantallas de entrada. El dibujo
+   viaja incrustado en el index.html (ver build.py); si por lo que sea no
+   esta, queda el nombre solo y no se rompe nada. */
+function marcaConLogo(tam, espaciado) {
+  return '<div class="marca-portada" style="font-size:' + tam + 'px;' +
+         'letter-spacing:' + (espaciado || '.07em') + '">' +
+         (window.MARCA_LOGO ? '<img src="' + MARCA_LOGO + '" alt="">' : '') +
+         '<span>' + esc(MARCA.nombre) + '</span></div>';
+}
+
 function pantallaEntrada() {
   document.body.innerHTML =
-    '<div id="app"><div class="lienzo" style="align-items:center;justify-content:center">' +
+    '<div id="app"><div class="lienzo portada">' +
     '<section class="ventana" style="max-width:420px;flex:0 1 420px">' +
     '<div class="cuerpo" id="entrada"></div></section></div></div>' +
     '<div id="avisos"></div>';
@@ -23,7 +33,7 @@ function pantallaEntrada() {
 
   c.insertAdjacentHTML('beforeend',
     '<div style="text-align:center;padding:14px 0 22px">' +
-    '<div style="font-size:26px;font-weight:700;letter-spacing:.09em">' + esc(MARCA.nombre) + '</div>' +
+    marcaConLogo(26, '.09em') +
     (MARCA.firma ? '<div style="font-size:13px;color:var(--acento);margin-top:2px">' +
       esc(MARCA.firma) + '</div>' : '') +
     '<div class="nota" style="margin-top:3px">' + esc(MARCA.bajada) + '</div></div>');
@@ -62,8 +72,7 @@ function pantallaEntrada() {
 
   c.insertAdjacentHTML('beforeend',
     '<p class="nota" style="margin-top:16px">¿Todavía no tenés cuenta? Se crea desde acá, ' +
-    'con el <b>código de invitación</b> que te da el titular del consultorio. Si sos el ' +
-    'titular y es la primera vez, no hace falta código.</p>');
+    'con el <b>código de invitación</b> que te da el titular del consultorio.</p>');
 
   /* La pregunta de la primera vez ("¿y yo cómo entro?") tiene que estar
      contestada acá y no solamente en un archivo aparte: es justo el momento

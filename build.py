@@ -8,6 +8,7 @@ No hace falta Node, ni npm, ni ningun paquete: solo Python 3. La salida es
 un index.html que se puede abrir con doble clic o subir a cualquier hosting
 estatico (GitHub Pages, Netlify, el servidor del consultorio).
 """
+import base64
 import os
 import re
 import sys
@@ -72,6 +73,18 @@ def main():
 
     marca = leer('marca.js')
 
+    # El logo viaja adentro del index.html, en base64. Podria ser un <img> que
+    # apunte a icons/logo-chico.png, pero entonces el index.html dejaria de
+    # abrirse solo con doble clic: se veria el nombre sin el dibujo. Lo genera
+    # make-icons.py a partir de icons/logo.png.
+    logo = ''
+    ruta_logo = os.path.join(BASE, 'icons', 'logo-chico.png')
+    if os.path.exists(ruta_logo):
+        with open(ruta_logo, 'rb') as f:
+            logo = 'data:image/png;base64,' + base64.b64encode(f.read()).decode('ascii')
+    else:
+        print('  !! falta icons/logo-chico.png (corre make-icons.py)')
+
     css = '\n'.join('/* ==== %s ==== */\n%s' % (f, leer(f)) for f in CSS)
 
     partes = []
@@ -118,7 +131,8 @@ def main():
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icons/icon-192.png">
 <link rel="apple-touch-icon" href="icons/icon-192.png">
-<script>window.ALGOS_BUILD = "%(version)s";</script>
+<script>window.ALGOS_BUILD = "%(version)s";
+window.MARCA_LOGO = "%(logo)s";</script>
 <style>
 %(css)s
 </style>
@@ -134,7 +148,7 @@ def main():
 </body>
 </html>
 """ % {'css': css, 'cuerpo': cuerpo, 'js': js, 'version': version,
-           'nombre': nombre, 'bajada': bajada}
+           'nombre': nombre, 'bajada': bajada, 'logo': logo}
 
     salida = os.path.join(BASE, 'index.html')
     with open(salida, 'w', encoding='utf-8') as f:
