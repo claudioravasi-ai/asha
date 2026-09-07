@@ -244,8 +244,15 @@ function guardar(rama, id, dato) {
       const permisos = e && (e.code === 'PERMISSION_DENIED' ||
                              /permission/i.test(e.message || ''));
       if (permisos) {
-        avisar('No se pudo guardar en el servidor. Es probable que tu sesión ' +
-               'haya vencido: salí y volvé a entrar.', 'error', 12000);
+        /* El mismo rechazo significa dos cosas distintas segun quien este del
+           otro lado. Al medico hay que decirle que revise su sesion; al
+           paciente, que no tiene sesion ninguna, decirle eso es mandarlo a
+           buscar un boton que no existe. */
+        avisar(esPortal()
+          ? 'No pudimos guardar sus respuestas en el servidor. Lo que escribió ' +
+            'quedó en este teléfono. Avise al consultorio antes de su turno.'
+          : 'No se pudo guardar en el servidor. Es probable que tu sesión ' +
+            'haya vencido: salí y volvé a entrar.', 'error', 12000);
       } else {
         avisar('Sin conexión. Se guardó en esta computadora y se va a subir ' +
                'solo cuando vuelva internet.', 'aviso');

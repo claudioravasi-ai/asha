@@ -513,6 +513,18 @@ function ventanaDolor(id) {
     resumen.innerHTML = '<h3>Lectura del mapa</h3>' + resumenMapa(d.mapa);
     c.appendChild(resumen);
 
+    /* ---- glifario ----------------------------------------------------- */
+    /* Solo se muestra: aca no se edita. Lo dibujo el paciente desde su casa y
+       corregirselo desde la consulta seria borrar el unico dato del que el
+       autor es el. */
+    if (glifoCompleto(p.glifario)) {
+      c.insertAdjacentHTML('beforeend',
+        '<h3 style="font-size:15px;margin:22px 0 4px">Cómo dibujó su dolor</h3>' +
+        '<p class="nota" style="margin-bottom:12px">Lo contestó en el portal, antes de la ' +
+        'consulta. Es su relato, no una medición: no entra en ningún cálculo.</p>' +
+        glifoResumenHTML(p.glifario));
+    }
+
     /* ---- impacto ------------------------------------------------------ */
     c.insertAdjacentHTML('beforeend',
       '<h3 style="font-size:15px;margin:22px 0 10px">Repercusión en la vida diaria</h3>');

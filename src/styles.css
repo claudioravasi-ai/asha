@@ -559,3 +559,168 @@ body.portal{overflow:auto; background:var(--lienzo)}
 }
 .plegable-c{padding:2px 12px 10px}
 .plegable-c .dato{font-size:13px}
+
+/* ====================================================== GLIFARIO ======== */
+/* El mapa no verbal que el paciente contesta antes que nada. Vive dentro de
+   una capa modal propia y no dentro de la pila de ventanas: no es una parada
+   mas del cuestionario, es una pausa. Tiene su propio aire, su propio ritmo
+   y una sola salida hacia adelante.                                        */
+
+:root{
+  /* El papel del glifo NO sigue el tema de la aplicacion. Los cinco tonos
+     estan elegidos para leerse sobre papel claro y sobre fondo negro el azul
+     cobalto y el gris plomo se pierden. Es la misma decision que la lamina
+     blanca del codigo QR, y por el mismo motivo. */
+  --glifo-papel:#F2ECE1;
+  --glifo-papel-2:#E7DCC8;
+  --glifo-tinta:#211D1A;
+  --glifo-tinta-2:#5B5247;
+}
+
+body.sin-scroll{overflow:hidden}
+
+.glifario-capa{
+  position:fixed; inset:0; z-index:120;
+  background:rgba(10,13,19,.62); backdrop-filter:blur(4px);
+  display:flex; align-items:flex-end; justify-content:center; padding:0;
+}
+@media(min-width:700px){ .glifario-capa{align-items:center; padding:24px} }
+
+.glifario-caja{
+  background:var(--ventana); width:100%; max-width:620px;
+  max-height:100%; overflow-y:auto; -webkit-overflow-scrolling:touch;
+  border-radius:18px 18px 0 0; box-shadow:var(--sombra-alta);
+  animation:sube .26s cubic-bezier(.2,.8,.3,1);
+}
+@media(min-width:700px){ .glifario-caja{border-radius:18px; max-height:92vh} }
+@media(prefers-reduced-motion:reduce){ .glifario-caja{animation:none} }
+
+.glifario-cab{
+  position:sticky; top:0; z-index:2; background:var(--ventana);
+  padding:20px 20px 12px; border-bottom:1px solid var(--linea);
+}
+.glifario-tit{font-size:19px; font-weight:600; letter-spacing:-.01em; margin-bottom:6px}
+.glifario-sub{font-size:13.5px; color:var(--tinta-2); line-height:1.55; margin:0}
+.glifario-barra{height:3px; border-radius:2px; background:var(--linea); margin-top:14px}
+.glifario-barra i{display:block; height:100%; border-radius:2px; background:var(--acento);
+  transition:width .25s ease}
+
+.glifario-cuerpo{padding:18px 20px 26px}
+
+/* ---- la lamina de papel con el dibujo -------------------------------- */
+.glifo-lamina{
+  background:var(--glifo-papel); border-radius:14px; padding:18px;
+  display:flex; align-items:center; justify-content:center;
+  background-image:radial-gradient(circle at 1px 1px, rgba(33,29,26,.055) 1px, transparent 0);
+  background-size:20px 20px;
+  box-shadow:inset 0 0 0 1px rgba(33,29,26,.09);
+}
+.glifo-lamina.chica{padding:10px; border-radius:11px; flex:0 0 auto}
+.glifo-svg{display:block; overflow:visible; max-width:100%; height:auto}
+
+.glifo-espera{
+  display:flex; flex-direction:column; align-items:center; gap:8px;
+  color:#8A8378; font-size:12.5px; padding:12px 0;
+}
+
+/* La dinamica que el paciente eligio se ve en el aura, no en la figura: asi
+   la figura sigue siendo la misma entre un paciente y otro. */
+.glifo-svg .aura{transform-origin:120px 120px}
+.glifo-svg.mov-pulsante .aura{animation:glifoLate 2.4s ease-in-out infinite}
+.glifo-svg.mov-pulsante .aura-2{animation-delay:.5s}
+.glifo-svg.mov-expansivo .aura{animation:glifoGira 14s linear infinite}
+.glifo-svg.mov-paroxistico .aura{animation:glifoChispa 3.6s steps(1) infinite}
+@keyframes glifoLate{0%,100%{transform:scale(.94); opacity:.16} 50%{transform:scale(1.02); opacity:.4}}
+@keyframes glifoGira{to{transform:rotate(360deg)}}
+@keyframes glifoChispa{0%,88%{opacity:.45} 90%,100%{opacity:0}}
+@media(prefers-reduced-motion:reduce){ .glifo-svg .aura{animation:none !important} }
+
+/* ---- las preguntas ---------------------------------------------------- */
+.glifo-preg{margin-top:24px}
+.glifo-preg-n{font-size:10.5px; letter-spacing:.1em; text-transform:uppercase;
+  color:var(--tinta-3); margin-bottom:3px}
+.glifo-preg-t{font-size:16.5px; font-weight:600; letter-spacing:-.01em}
+.glifo-preg-a{font-size:13px; color:var(--tinta-3); line-height:1.5; margin:4px 0 0}
+
+.glifo-ops{display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-top:11px}
+@media(max-width:420px){ .glifo-ops{grid-template-columns:1fr} }
+.glifo-ops.intensidad{grid-template-columns:repeat(5,1fr)}
+
+.glifo-op{
+  display:flex; flex-direction:column; align-items:flex-start; gap:2px;
+  text-align:left; padding:11px 13px; cursor:pointer;
+  background:var(--ventana); border:1px solid var(--linea); border-radius:11px;
+  transition:border-color .15s ease, background .15s ease, transform .15s ease;
+}
+.glifo-op:hover{border-color:var(--tinta-3); transform:translateY(-1px)}
+.glifo-op.on{border-color:var(--acento); background:var(--acento-claro); border-width:1.5px}
+.glifo-op-t{font-size:14.5px; font-weight:500; line-height:1.3}
+.glifo-op.on .glifo-op-t{color:var(--acento-tinta); font-weight:600}
+.glifo-op-p{font-size:12px; color:var(--tinta-3); line-height:1.35}
+.glifo-op.num{align-items:center; justify-content:center; padding:14px 0}
+.glifo-op.num .glifo-op-t{font-size:18px}
+
+.glifo-ops.color .glifo-op{flex-direction:row; align-items:center; flex-wrap:wrap; gap:9px}
+.glifo-punto{width:24px; height:24px; border-radius:50%; flex:0 0 auto;
+  box-shadow:inset 0 0 0 1px rgba(0,0,0,.18)}
+.glifo-ops.color .glifo-op-p{flex-basis:100%; padding-left:33px}
+
+/* ---- la devolucion ---------------------------------------------------- */
+.glifo-devo{
+  margin-top:16px; padding:16px 18px; border-radius:13px;
+  background:var(--acento-claro); border-left:3px solid var(--acento);
+}
+.glifo-devo-t{font-size:17px; font-weight:600; color:var(--acento-tinta); letter-spacing:-.01em}
+.glifo-devo-d{font-size:14px; color:var(--tinta-2); line-height:1.55; margin:6px 0 0}
+.glifo-devo-f{font-size:15px; line-height:1.6; margin:12px 0 0; font-style:italic}
+.glifo-devo-v{font-size:12.5px; color:var(--tinta-3); margin:8px 0 0}
+
+/* ---- las salidas ------------------------------------------------------ */
+.glifario-pie{margin-top:28px; padding-top:20px; border-top:1px solid var(--linea)}
+.glifo-seguir{
+  display:block; width:100%; padding:15px; border:0; border-radius:12px;
+  background:var(--acento); color:#fff; font-size:16px; font-weight:600;
+  cursor:pointer; text-align:center;
+}
+.glifo-seguir:hover{filter:brightness(1.06)}
+.glifo-seguir.apagado{background:var(--linea); color:var(--tinta-3); cursor:default}
+.glifo-pie-n{font-size:12px; color:var(--tinta-3); text-align:center; margin:9px 0 0; line-height:1.45}
+.glifo-saltar{
+  display:block; width:100%; margin-top:14px; padding:11px; background:none;
+  border:0; color:var(--tinta-3); font-size:13.5px; cursor:pointer; text-decoration:underline;
+}
+.glifo-saltar:hover{color:var(--tinta-2)}
+
+/* ---- lo que ve la medica ---------------------------------------------- */
+.glifo-medico{display:flex; gap:16px; align-items:flex-start; flex-wrap:wrap}
+.glifo-medico-txt{flex:1 1 260px; min-width:0}
+.glifo-medico-txt .dato dt{flex-basis:38%}
+
+/* ---- la tarjeta del portal, cuando ya lo contesto --------------------- */
+.glifo-hecho{
+  display:flex; gap:14px; align-items:center; margin:14px 0;
+  padding:12px 14px; border:1px solid var(--linea); border-radius:13px;
+  background:var(--ventana); cursor:pointer;
+}
+.glifo-hecho:hover{border-color:var(--acento)}
+.glifo-hecho .glifo-lamina{padding:8px; border-radius:10px}
+.glifo-hecho b{display:block; font-size:14.5px}
+.glifo-hecho small{display:block; font-size:12.5px; color:var(--tinta-3); line-height:1.4; margin-top:2px}
+
+/* El titular del glifario: lo primero que ve la medica al abrir un
+   cuestionario del portal. Una sola linea de informacion y el dibujo. */
+.glifo-titular{
+  display:flex; gap:15px; align-items:center; margin:0 0 14px;
+  padding:14px 16px; border-radius:var(--r);
+  background:var(--acento-claro); border-left:3px solid var(--acento);
+}
+@media(max-width:520px){ .glifo-titular{flex-direction:column; align-items:flex-start} }
+.glifo-titular .glifo-lamina{padding:9px; border-radius:11px}
+.glifo-titular-txt{flex:1; min-width:0}
+.glifo-titular-r{font-size:10.5px; letter-spacing:.1em; text-transform:uppercase;
+  color:var(--acento-tinta); opacity:.8}
+.glifo-titular-n{font-size:18px; font-weight:600; letter-spacing:-.01em;
+  color:var(--acento-tinta); margin-top:2px}
+.glifo-titular-n .mono{font-size:11.5px; color:var(--tinta-3); font-weight:400}
+.glifo-titular-d{font-size:13.5px; color:var(--tinta-2); line-height:1.5; margin:5px 0 0}
+.glifo-titular-a{font-size:12.5px; color:var(--tinta-3); line-height:1.45; margin:6px 0 0}

@@ -448,6 +448,18 @@ function ventanaVerPrecarga(token) {
           esc(nombres.join(' · ')) + '</p></div>');
       }
 
+      /* Arriba de todo, antes que nada: como dibujo su dolor. El cuestionario
+         completo sigue llegando entero e igual que siempre —abajo, en el mismo
+         orden de siempre—; esto es solamente el titular, para saber con que se
+         va a encontrar antes de leer una sola linea.
+
+         Lo unico que va todavia mas arriba son las banderas rojas, y eso no se
+         toca: ninguna figura del glifario vale mas que un paciente que marco
+         perdida de peso y fiebre. */
+      if (glifoCompleto(d.glifario)) {
+        c.insertAdjacentHTML('beforeend', glifoResumenHTML(d.glifario));
+      }
+
       c.appendChild(superficie('Tomar en consulta',
         'Crea la historia clínica con todo esto ya cargado y la abre', () => {
           incorporarPrecarga(token);
@@ -579,6 +591,10 @@ function incorporarPrecarga(token) {
     alivia:d.alivia || '', empeora:d.empeora || '',
     mapa:d.mapa || [], meses:mesesDesde(d.inicio),
     fechaHistoria:hoy()};
+
+  /* El glifo viaja con la historia. No alimenta ningun calculo ni ninguna
+     sugerencia del motor: es el relato del paciente, y se guarda como tal. */
+  if (glifoCompleto(d.glifario)) p.glifario = d.glifario;
 
   p.impacto = {sueño:d.sueño || '', trabajo:d.trabajo || '', animo:d.animo || '',
                dejoDeHacer:d.dejoDeHacer || '',

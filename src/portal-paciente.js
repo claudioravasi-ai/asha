@@ -36,6 +36,11 @@ const PASOS_PORTAL = [
 let PRECARGA = null;      // el cuestionario que se esta completando
 let PASO = 0;
 
+/* El glifario se abre solo una vez por visita. Si la persona lo saltea, no se
+   le vuelve a aparecer en la cara cada vez que toca un campo del primer paso:
+   queda la tarjeta abajo, que puede tocar cuando quiera. */
+let GLIFARIO_OFRECIDO = false;
+
 /* Encabezado unico del portal. Estaba repetido en cuatro pantallas y en una
    de ellas faltaba la firma; con una sola funcion eso no puede volver a pasar. */
 function cabezaPortal(bajada) {
@@ -184,6 +189,7 @@ function cuestionarioVacio() {
     dn4:[null,null,null,null,null,null,null],
     phq4:[null,null,null,null],
     banderas:[], comentarios:'',
+    glifario:null,
     consiente:false
   };
 }
@@ -283,11 +289,31 @@ function pintarPaso() {
 /* ------------------------------------------------------------- pasos ---- */
 
 function pasoQuien(c, d) {
+  /* Si ya contesto el glifario, lo primero que ve al volver es su propio
+     dibujo. Es lo unico de todo el cuestionario que es suyo y de nadie mas, y
+     ponerlo arriba hace que volver al formulario no sea solo una obligacion. */
+  if (glifoCompleto(d.glifario)) c.appendChild(tarjetaGlifario(d));
+
   c.insertAdjacentHTML('beforeend', '<p class="nota" style="margin-bottom:14px">' +
     'Estos datos son para identificarlo y para la facturación de su cobertura.</p>');
+
+  /* Apenas hay nombre Y apellido se abre el glifario. Antes no: sin el nombre
+     puesto la persona todavia no entro del todo, y la ventana la agarraria de
+     sorpresa sobre una pantalla en blanco. */
+  const abrirSiCorresponde = () => {
+    if (GLIFARIO_OFRECIDO || GLIFO_ABIERTO) return;
+    if (glifoCompleto(d.glifario)) return;
+    if (!String(d.apellido || '').trim() || !String(d.nombre || '').trim()) return;
+    GLIFARIO_OFRECIDO = true;
+    guardarPrecarga();
+    /* El respiro es para que el teclado del telefono termine de bajar: la
+       ventana que aparece mientras el teclado se cierra queda a medio dibujar. */
+    setTimeout(() => abrirGlifario(d, () => { guardarPrecarga(); pintarPaso(); }), 380);
+  };
+
   const g1 = document.createElement('div'); g1.className = 'dos'; c.appendChild(g1);
-  campo(g1, 'Apellido', d, 'apellido');
-  campo(g1, 'Nombre', d, 'nombre');
+  campo(g1, 'Apellido', d, 'apellido', {alCambiar:abrirSiCorresponde});
+  campo(g1, 'Nombre', d, 'nombre', {alCambiar:abrirSiCorresponde});
   const g2 = document.createElement('div'); g2.className = 'dos'; c.appendChild(g2);
   campo(g2, 'Documento', d, 'dni');
   campo(g2, 'Fecha de nacimiento', d, 'fechaNac', {tipo:'date'});
@@ -304,6 +330,33 @@ function pasoQuien(c, d) {
   campo(g4, 'Obra social o prepaga', d, 'obraSocial');
   campo(g4, 'Ocupación', d, 'ocupacion');
   campo(c, '¿Quién lo derivó?', d, 'derivante', {pista:'nombre del médico o servicio'});
+
+  /* Si todavia no lo contesto —porque lo salteo o porque volvio antes de
+     terminarlo— la puerta queda abierta aca abajo y no desaparece. */
+  if (!glifoCompleto(d.glifario)) {
+    c.insertAdjacentHTML('beforeend',
+      '<h3 style="font-size:15px;margin:26px 0 4px">Antes de seguir</h3>' +
+      '<p class="nota" style="margin-bottom:10px">Hay una parte del cuestionario que no se ' +
+      'contesta escribiendo: son seis preguntas para dibujar cómo es su dolor. Tarda dos ' +
+      'minutos y es lo primero que va a mirar el especialista.</p>');
+    c.appendChild(superficie('Dibujar cómo es mi dolor',
+      'Seis preguntas, sin escribir nada', () => {
+        abrirGlifario(d, () => { guardarPrecarga(); pintarPaso(); });
+      }, 'acento'));
+  }
+}
+
+/* Tarjeta con el glifo ya elegido. Se toca para volver a abrirlo y cambiarlo:
+   mientras el cuestionario no este enviado, nada de lo que puso es definitivo. */
+function tarjetaGlifario(d) {
+  const n = GLIFO_NUCLEOS[d.glifario.nucleo];
+  const t = document.createElement('div');
+  t.className = 'glifo-hecho';
+  t.innerHTML = '<div class="glifo-lamina">' + glifoSVG(d.glifario, 78) + '</div>' +
+    '<div><b>' + esc(n.nombre) + '</b>' +
+    '<small>Así dibujó su dolor. Toque acá para verlo de nuevo o cambiarlo.</small></div>';
+  t.onclick = () => abrirGlifario(d, () => { guardarPrecarga(); pintarPaso(); });
+  return t;
 }
 
 function pasoAntecedentes(c, d) {
@@ -512,6 +565,10 @@ function pasoEnviar(c, d) {
     dato('Intensidad promedio', d.nrsPromedio != null
       ? '<b>' + d.nrsPromedio + '/10</b> ' + marca(colorDolor(d.nrsPromedio).nombre,
           d.nrsPromedio <= 2 ? 'verde' : d.nrsPromedio <= 6 ? 'ambar' : 'rojo') : '—') +
+    dato('Cómo dibujó su dolor', glifoCompleto(d.glifario)
+      ? esc(GLIFO_NUCLEOS[d.glifario.nucleo].nombre) + ' <span class="mono">' +
+        esc(d.glifario.codigo) + '</span>'
+      : 'sin contestar') +
     dato('Puntos marcados en el mapa', (d.mapa || []).length) +
     dato('Tratamientos previos declarados', (d.tratamientos || []).length) +
     dato('Medicación actual', (d.medicacion || []).length + ' medicamento(s)')

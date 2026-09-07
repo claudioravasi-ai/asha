@@ -40,6 +40,16 @@ QUE HACEN, EN CASTELLANO
    ningun correo. Solo se puede escribir una vez, o cambiarla el titular.
 
 5. EL PACIENTE NO TIENE CUENTA Y NO LA VA A TENER.
+   >>> ESTA REGLA SE CORRIGIO EL 07-09-2026 Y HAY QUE VOLVER A PUBLICARLA. <<<
+   La version anterior empezaba con:
+       "root.child('dolor/equipo').child(auth.uid).exists() || ( ... )"
+   Cuando quien escribe es un paciente, auth vale null, y auth.uid rompe la
+   evaluacion de la expresion. Firebase no la saltea ni sigue por el otro lado
+   del "o": da la regla entera por FALSA. Resultado: ningun paciente podia
+   crear su cuestionario, y el portal contestaba "no pudimos registrar su
+   solicitud" a todo el mundo. Por eso ahora la primera parte pregunta primero
+   si hay sesion (auth != null) y recien despues mira el uid.
+
    La rama de precargas es la unica que acepta escritura sin cuenta. Pero:
      · NO se puede LISTAR la rama entera: nadie puede pedir "dame todos los
        cuestionarios";
@@ -138,7 +148,7 @@ COPIAR DESDE LA LLAVE DE ABAJO HASTA LA ULTIMA LLAVE
         "$token": {
           ".read": true,
 
-          ".write": "root.child('dolor/equipo').child(auth.uid).exists() || (
+          ".write": "(auth != null && root.child('dolor/equipo').child(auth.uid).exists()) || (
                        $token.length >= 40 &&
                        newData.exists() &&
                        newData.hasChildren(['token','dni','estado']) &&
@@ -180,6 +190,21 @@ En "Simulador de reglas", probar estas cinco cosas:
                                              (uid inventado, que no esta
                                               en el equipo)
   /dolor/precargas/<token largo>   Lectura   No            PERMITIDO
+  /dolor/precargas/<token largo>   Escritura No            PERMITIDO
+                                             (con un dato que tenga token,
+                                              dni y estado:'borrador')
+
+La ESCRITURA sin cuenta es la que estuvo rota: si da DENEGADO, el portal del
+paciente no funciona y nadie puede pedir su enlace. Se puede probar tambien
+desde una terminal, sin entrar a la consola:
+
+  curl -X PUT 'https://algos-dolor-default-rtdb.firebaseio.com/dolor/precargas/PRUEBA000000000000000000000000000000000000.json' \
+    -H 'Content-Type: application/json' \
+    -d '{"token":"PRUEBA000000000000000000000000000000000000","dni":"0","estado":"borrador"}'
+
+Tiene que devolver el mismo objeto que se mando. Si devuelve "Permission
+denied", las reglas nuevas no se publicaron. Despues de la prueba, borrar ese
+nodo desde la consola.
 
 Las primeras CUATRO tienen que dar DENEGADO. La cuarta es la importante y es
 la que las reglas viejas no cubrian: un usuario logueado que no pertenece al
